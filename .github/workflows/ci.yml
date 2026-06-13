@@ -31,8 +31,10 @@ jobs:
       - name: Compile
         run: python -m compileall app.py src tests
 
+      - name: Import app
+        run: python -c "import app; print('app import ok')"
+
       - name: Test
         env:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
         run: python -m pytest -q tests -p no:cacheprovider
-
