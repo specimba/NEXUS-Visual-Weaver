@@ -75,10 +75,14 @@ Generated outputs, local moodboards, logs, caches, auth folders, and preview art
 
 ## Review Workflow
 
-- First bootstrap commit establishes the empty public GitHub repository.
+- Bootstrap commit establishes the public GitHub repository baseline.
 - Future substantial changes should use `codex/specimba/<scope>` branches and draft pull requests.
 - GitHub Actions runs compile and pytest.
 - CodeRabbit is configured to focus review on Gradio runtime correctness, model governance, security gates, Adult Mode behavior, and regression coverage.
 
 See [docs/RELEASE_WORKFLOW.md](docs/RELEASE_WORKFLOW.md) for the push and review gate.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
 
