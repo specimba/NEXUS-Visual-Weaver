@@ -4,7 +4,7 @@ from nexus_visual_weaver.catalog import active_stack, catalog_summary, filter_ca
 from nexus_visual_weaver.grounding import inspect_outfit
 from nexus_visual_weaver.model_relay import WeaverModelRelay
 from nexus_visual_weaver.planner import build_command_center_run
-from nexus_visual_weaver.render import render_command_header, render_dashboard_regions
+from nexus_visual_weaver.render import render_command_header, render_dashboard_regions, render_operations_panel
 from nexus_visual_weaver.security import scan_file
 from nexus_visual_weaver.taste import refine_prompt, score_prompt
 from nexus_visual_weaver.wardrobe import build_outfit_graph
@@ -117,6 +117,14 @@ def test_dashboard_operations_follow_selected_section() -> None:
         assert f"{section} Operations" in regions["operations"]
         assert marker in regions["operations"]
         assert f"Selected: {section}" in regions["command_rail"]
+
+
+def test_security_operations_distinguish_clean_scan_from_idle() -> None:
+    clean_scan = {"status": "pass", "export_gate": "clear", "findings": []}
+    html = render_operations_panel(active_section="Security", scan=clean_scan)
+
+    assert "No findings." in html
+    assert "No upload selected." not in html
 
 
 def test_command_header_exposes_governed_run_controls() -> None:

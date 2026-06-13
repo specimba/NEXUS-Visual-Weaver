@@ -253,9 +253,12 @@ def render_operations_panel(
     scan = scan or {"status": "idle", "export_gate": "pending", "findings": []}
     relay_status = relay_status or {}
     section = active_section if active_section in {"Forge", "Wardrobe", "Lore", "Models", "Security", "Runs"} else "Forge"
-    run_id = run.checkpoint.checkpoint_id if run else "not-started"
-    outfit_count = len(run.outfit.slots) if run else 0
-    lore_count = len(run.lore.beats) if run else 0
+    checkpoint = getattr(run, "checkpoint", None) if run else None
+    outfit = getattr(run, "outfit", None) if run else None
+    lore = getattr(run, "lore", None) if run else None
+    run_id = getattr(checkpoint, "checkpoint_id", "not-started")
+    outfit_count = len(getattr(outfit, "slots", []) or [])
+    lore_count = len(getattr(lore, "beats", []) or [])
     scan_status = str(scan.get("status", "idle")).upper()
     export_gate = str(scan.get("export_gate", "pending")).upper()
     decisions = relay_status.get("decisions", [])
@@ -285,7 +288,11 @@ def render_operations_panel(
         ],
         "Security": [
             ("ST3GG state", f"{scan_status} / export {export_gate}"),
-            ("Findings", "; ".join(str(item) for item in (scan.get("findings") or [])[:2]) or "No upload selected."),
+            (
+                "Findings",
+                "; ".join(str(item) for item in (scan.get("findings") or [])[:2])
+                or ("No findings." if scan_status != "IDLE" else "No upload selected."),
+            ),
             ("Public export", "Consent, provenance, metadata, age, dataset, and payload gates stay active."),
         ],
         "Runs": [
