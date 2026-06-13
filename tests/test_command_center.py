@@ -97,6 +97,15 @@ def test_dashboard_regions_expose_artifacts_and_provider_cards() -> None:
     assert "ST3GG Scan" in regions["inspector"]
 
 
+def test_dashboard_regions_render_with_empty_relay_and_default_scan() -> None:
+    regions = render_dashboard_regions(relay_status={}, scan=None, active_section="Forge")
+
+    assert "Forge Operations" in regions["operations"]
+    assert "not-started" in regions["operations"]
+    assert "snapshot pending" in regions["providers"]
+    assert "Selected: Forge" in regions["command_rail"]
+
+
 def test_dashboard_operations_follow_selected_section() -> None:
     relay = WeaverModelRelay()
     sections = {

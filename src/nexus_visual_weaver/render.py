@@ -248,6 +248,7 @@ def render_operations_panel(
     run: GenerationRun | None = None,
     scan: dict | None = None,
     relay_status: dict | None = None,
+    *,
     adult_mode: bool = False,
 ) -> str:
     scan = scan or {"status": "idle", "export_gate": "pending", "findings": []}
@@ -592,7 +593,7 @@ def render_dashboard_regions(
         "rail": render_left_rail(active_section),
         "command_rail": render_command_rail(active_section),
         "workflow": render_workflow(run),
-        "operations": render_operations_panel(active_section, run, scan, relay_status, adult_mode),
+        "operations": render_operations_panel(active_section, run, scan, relay_status, adult_mode=adult_mode),
         "inspector": render_inspector(run, scan, relay_status),
         "drawer": render_drawer(run),
         "status": render_status_bar(),
