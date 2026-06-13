@@ -22,7 +22,7 @@ except Exception:  # pragma: no cover - local development does not require Space
 from nexus_visual_weaver.catalog import catalog_summary
 from nexus_visual_weaver.model_relay import WeaverModelRelay
 from nexus_visual_weaver.planner import build_command_center_run
-from nexus_visual_weaver.render import render_catalog_table, render_dashboard_regions
+from nexus_visual_weaver.render import render_catalog_table, render_command_header, render_dashboard_regions
 from nexus_visual_weaver.security import scan_file
 from nexus_visual_weaver.styles import APP_CSS
 
@@ -82,7 +82,7 @@ def run_weave(
     adult_mode: bool,
     upload: Any,
     active_section: str,
-) -> tuple[str, str, str, str, str, str, str, str, str, dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[str, str, str, str, str, str, str, str, str, str, dict[str, Any], dict[str, Any], dict[str, Any]]:
     prompt = prompt.strip() or DEFAULT_PROMPT
     run = build_command_center_run(
         prompt=prompt,
@@ -97,6 +97,7 @@ def run_weave(
         regions["topbar"],
         regions["command_rail"],
         regions["workflow"],
+        regions["operations"],
         regions["inspector"],
         regions["drawer"],
         regions["status"],
@@ -113,12 +114,13 @@ def toggle_adult_visibility(
     adult_mode: bool,
     active_section: str,
     upload: Any,
-) -> tuple[str, str, str, str, str, str, dict[str, Any], dict[str, Any]]:
+) -> tuple[str, str, str, str, str, str, str, dict[str, Any], dict[str, Any]]:
     scan = scan_file(_file_path(upload))
     regions = _dashboard_regions(adult_mode=adult_mode, scan=scan, active_section=active_section)
     return (
         regions["topbar"],
         regions["command_rail"],
+        regions["operations"],
         regions["inspector"],
         regions["artifacts"],
         regions["providers"],
@@ -132,10 +134,10 @@ def refresh_section(
     active_section: str,
     adult_mode: bool,
     upload: Any,
-) -> tuple[str, str, str, str, dict[str, Any]]:
+) -> tuple[str, str, str, str, str, dict[str, Any]]:
     scan = scan_file(_file_path(upload))
     regions = _dashboard_regions(adult_mode=adult_mode, scan=scan, active_section=active_section)
-    return regions["command_rail"], regions["inspector"], regions["artifacts"], regions["providers"], scan
+    return regions["command_rail"], regions["operations"], regions["inspector"], regions["artifacts"], regions["providers"], scan
 
 
 initial_regions = _dashboard_regions(scan=scan_file(None))
@@ -144,6 +146,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
     topbar_html = gr.HTML(initial_regions["topbar"], container=False)
 
     with gr.Group(elem_id="nw-inputs", elem_classes=["nw-control-panel"]):
+        gr.HTML(render_command_header(), container=False)
         with gr.Row():
             prompt = gr.Textbox(
                 value=DEFAULT_PROMPT,
@@ -190,6 +193,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
             command_rail_html = gr.HTML(initial_regions["command_rail"], container=False)
         with gr.Column(scale=5, min_width=620, elem_id="nw-main-column"):
             workflow_html = gr.HTML(initial_regions["workflow"], container=False)
+            operations_html = gr.HTML(initial_regions["operations"], container=False)
             artifact_html = gr.HTML(initial_regions["artifacts"], container=False)
             drawer_html = gr.HTML(initial_regions["drawer"], container=False)
         with gr.Column(scale=2, min_width=340, elem_id="nw-side-column"):
@@ -212,6 +216,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
             topbar_html,
             command_rail_html,
             workflow_html,
+            operations_html,
             inspector_html,
             drawer_html,
             status_html,
@@ -231,6 +236,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
             topbar_html,
             command_rail_html,
             workflow_html,
+            operations_html,
             inspector_html,
             drawer_html,
             status_html,
@@ -249,6 +255,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
         outputs=[
             topbar_html,
             command_rail_html,
+            operations_html,
             inspector_html,
             artifact_html,
             provider_html,
@@ -261,7 +268,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
     section_nav.change(
         fn=refresh_section,
         inputs=[section_nav, adult_mode, upload],
-        outputs=[command_rail_html, inspector_html, artifact_html, provider_html, scan_json],
+        outputs=[command_rail_html, operations_html, inspector_html, artifact_html, provider_html, scan_json],
         api_name=False,
     )
     demo.load(

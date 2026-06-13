@@ -33,6 +33,24 @@ def _metric(label: str, value: str, tone: str = "neutral") -> str:
     return f'<div class="nw-metric nw-metric-{tone}"><small>{escape(label)}</small><strong>{escape(value)}</strong></div>'
 
 
+def render_command_header() -> str:
+    return f"""
+    <section class="nw-command-header">
+      <div>
+        <small>COMMAND INPUT</small>
+        <strong>Raven Chronicle Active Weave</strong>
+        <span>Prompt, reference scan, model route, and checkpoint controls stay in one sticky operator strip.</span>
+      </div>
+      <div class="nw-command-pills">
+        {badge("SFW DEFAULT", "pass")}
+        {badge("ST3GG ALWAYS ON", "cyan")}
+        {badge("FLUX.2 PINNED", "accent")}
+        {badge("HUMAN CHECKPOINT", "warn")}
+      </div>
+    </section>
+    """
+
+
 def render_topbar(adult_mode: bool = False, relay_status: dict | None = None) -> str:
     summary = catalog_summary(adult_mode)
     active = float(summary["active_b"])
@@ -178,22 +196,25 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
     outfit_label = "Outfit map"
     locate_label = "Grounding overlay"
     video_label = run.video.preset if run else "Video path"
+    active_prompt = run.refined_prompt.refined[:150] if run else "Awaiting first weave. The preview stage shows dry-run handoff packets until provider output exists."
+    checkpoint = getattr(run.checkpoint, "recommendation", "pending") if run else "pending"
     artifacts = [
-        (prompt_label, "Taste-refined brief", "dry-run", "material-0"),
-        (outfit_label, "Wardrobe slots and locks", "dry-run", "material-1"),
-        (locate_label, "LocateAnything region plan", "dry-run", "material-4"),
-        (video_label, "Checkpointed storyboard", "blocked" if scan.get("export_gate") == "blocked" else "ready", "story-2"),
+        (prompt_label, "Taste-refined brief", "dry-run", "material-0", "01"),
+        (outfit_label, "Wardrobe slots and locks", "dry-run", "material-1", "02"),
+        (locate_label, "LocateAnything region plan", "dry-run", "material-4", "03"),
+        (video_label, "Checkpointed storyboard", "blocked" if scan.get("export_gate") == "blocked" else "ready", "story-2", "04"),
     ]
     cards = "".join(
         f"""
         <div class="nw-artifact-card">
+          <small>{escape(index)}</small>
           <i class="nw-{texture}"></i>
           <strong>{escape(title)}</strong>
           <span>{escape(body)}</span>
           {badge(status.upper(), "warn" if status == "blocked" else "muted")}
         </div>
         """
-        for title, body, status, texture in artifacts
+        for title, body, status, texture, index in artifacts
     )
     export_gate = str(scan.get("export_gate", "pending")).upper()
     return f"""
@@ -202,7 +223,93 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
         <div><strong>Artifact Preview Lane</strong><small>Honest handoff packets until a provider call succeeds</small></div>
         {badge(f"Export {export_gate}", "warn" if export_gate == "BLOCKED" else "pass" if export_gate == "CLEAR" else "muted")}
       </div>
+      <div class="nw-preview-stage">
+        <div class="nw-preview-frame">
+          <i class="nw-preview-image"></i>
+          <div class="nw-preview-caption">
+            <small>PRIMARY OUTPUT STAGE</small>
+            <strong>Generated artifact preview will land here</strong>
+            <span>{escape(active_prompt)}</span>
+          </div>
+        </div>
+        <div class="nw-preview-meta">
+          <div><small>checkpoint</small><strong>{escape(str(checkpoint).replace("_", " ").title())}</strong></div>
+          <div><small>export gate</small><strong>{escape(export_gate)}</strong></div>
+          <div><small>preview mode</small><strong>Dry Run</strong></div>
+        </div>
+      </div>
       <div class="nw-artifact-grid">{cards}</div>
+    </section>
+    """
+
+
+def render_operations_panel(
+    active_section: str = "Forge",
+    run: GenerationRun | None = None,
+    scan: dict | None = None,
+    relay_status: dict | None = None,
+    adult_mode: bool = False,
+) -> str:
+    scan = scan or {"status": "idle", "export_gate": "pending", "findings": []}
+    relay_status = relay_status or {}
+    section = active_section if active_section in {"Forge", "Wardrobe", "Lore", "Models", "Security", "Runs"} else "Forge"
+    run_id = run.checkpoint.checkpoint_id if run else "not-started"
+    outfit_count = len(run.outfit.slots) if run else 0
+    lore_count = len(run.lore.beats) if run else 0
+    scan_status = str(scan.get("status", "idle")).upper()
+    export_gate = str(scan.get("export_gate", "pending")).upper()
+    decisions = relay_status.get("decisions", [])
+    first_decision = decisions[0] if decisions else {}
+    first_primary = (first_decision.get("primary") or {}) if first_decision else {}
+    adult_scope = "Private research scope" if adult_mode else "Public demo scope"
+    panels = {
+        "Forge": [
+            ("Prompt contract", "Taste-refined prompt, material locks, negative purge, and checkpoint requirements."),
+            ("Active run", f"{run_id} / checkpoint remains human-reviewed before video promotion."),
+            ("Provider posture", "Dry-run packets are visible before paid or gated calls."),
+        ],
+        "Wardrobe": [
+            ("Slot coverage", f"{outfit_count or 9} garment/accessory regions tracked with locks and edit priority."),
+            ("Footwear focus", "Platform boots, stilettos, high-heel boots, hardware, and silhouette constraints stay first-class."),
+            ("Locate map", "Reference regions feed preflight and post-generation outfit verification."),
+        ],
+        "Lore": [
+            ("Beat budget", f"{lore_count or 6} compact beats: identity, garment meaning, world context, emotion, motion."),
+            ("Video checkpoint", "Video presets remain handoff plans until human approval."),
+            ("Continuity locks", "Lore-to-video keeps garment meaning and motion cue visible without tab sprawl."),
+        ],
+        "Models": [
+            ("Primary helper", _short_repo(str(first_primary.get("repo_id", "pending")))),
+            ("Rotation mode", "Pinned core stays fixed; helper lanes rotate by license, budget, quota, and health."),
+            ("Scope", adult_scope),
+        ],
+        "Security": [
+            ("ST3GG state", f"{scan_status} / export {export_gate}"),
+            ("Findings", "; ".join(str(item) for item in (scan.get("findings") or [])[:2]) or "No upload selected."),
+            ("Public export", "Consent, provenance, metadata, age, dataset, and payload gates stay active."),
+        ],
+        "Runs": [
+            ("Current checkpoint", run_id),
+            ("Ledger mode", "Run JSON, catalog summary, and ST3GG evidence remain in the evidence accordion."),
+            ("Rollback path", "Feature branches and draft PRs carry implementation checkpoints."),
+        ],
+    }
+    rows = "".join(
+        f"""
+        <div class="nw-operation-card">
+          <small>{escape(title)}</small>
+          <strong>{escape(body)}</strong>
+        </div>
+        """
+        for title, body in panels[section]
+    )
+    return f"""
+    <section class="nw-panel nw-operations">
+      <div class="nw-panel-head">
+        <div><strong>{escape(section)} Operations</strong><small>Section-aware control surface for the selected command rail lane</small></div>
+        {badge(f"{escape(section).upper()} ACTIVE", "cyan")}
+      </div>
+      <div class="nw-operation-grid">{rows}</div>
     </section>
     """
 
@@ -275,6 +382,7 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
               <small>{escape(lane)}</small>
               <strong>{escape(repo)}</strong>
               <span>{escape(str(provider))} / {escape(str(gate))}</span>
+              <i class="nw-provider-meter" style="--health:{'86' if status == 'ready' else '52' if status == 'limited' else '22'}"></i>
               <div>{badge(str(status).upper(), tone)}{badge("DRY-RUN", "muted")}</div>
             </div>
             """
@@ -451,6 +559,7 @@ def render_dashboard(
         {regions["rail"]}
         <div class="nw-main-stack">
           {regions["workflow"]}
+          {regions["operations"]}
           {regions["artifacts"]}
         </div>
         <div class="nw-side-stack">
@@ -476,6 +585,7 @@ def render_dashboard_regions(
         "rail": render_left_rail(active_section),
         "command_rail": render_command_rail(active_section),
         "workflow": render_workflow(run),
+        "operations": render_operations_panel(active_section, run, scan, relay_status, adult_mode),
         "inspector": render_inspector(run, scan, relay_status),
         "drawer": render_drawer(run),
         "status": render_status_bar(),
