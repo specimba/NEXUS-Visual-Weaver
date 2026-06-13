@@ -1,0 +1,23 @@
+language: en-US
+early_access: false
+reviews:
+  profile: assertive
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  path_filters:
+    - "!outputs/**"
+    - "!**/__pycache__/**"
+    - "!pytest-cache-files-*/**"
+  path_instructions:
+    - path: "src/nexus_visual_weaver/**"
+      instructions: "Focus on Gradio runtime correctness, defensive security gates, model-lane governance, parameter-budget logic, and test coverage for fallback behavior."
+    - path: "app.py"
+      instructions: "Check that UI callbacks update the intended regions, never leak secrets, and keep Adult Mode security gates active."
+    - path: "tests/**"
+      instructions: "Prefer focused regression tests for workflow routing, ST3GG evidence, catalog filtering, and ModelRelay quota behavior."
+chat:
+  auto_reply: true
+
