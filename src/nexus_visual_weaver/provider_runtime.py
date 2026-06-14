@@ -64,7 +64,7 @@ def _post_json(url: str, token: str, payload: dict[str, Any], timeout: float) ->
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - URL comes from Space secret/config.
-        return json.loads(response.read().decode("utf-8"))
+        return json.loads(response.read().decode("utf-8", errors="replace"))
 
 
 def _extract_content(response: dict[str, Any]) -> str:
