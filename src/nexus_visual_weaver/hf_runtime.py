@@ -70,7 +70,7 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
     started = time.perf_counter()
     try:
         import torch
-        from diffusers import Flux2KleinPipeline
+        from diffusers import FluxPipeline
     except Exception as exc:  # pragma: no cover - depends on Space runtime packages.
         return HFGenerationResult(
             status="missing_runtime",
