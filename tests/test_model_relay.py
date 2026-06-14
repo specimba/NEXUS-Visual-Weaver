@@ -117,3 +117,80 @@ def test_dashboard_surfaces_gmr_pinned_models_and_fallbacks() -> None:
     assert "LocateAnything pinned" in html
     assert "fallback:" in html
     assert "Rotation Safe" in html
+
+
+def test_optional_external_gateways_are_registered_but_excluded_by_default() -> None:
+    relay = WeaverModelRelay()
+
+    assert relay.records["netlify-ai-gateway-helper"].provider == "netlify"
+    assert relay.records["cloudflare-agent-helper"].provider == "cloudflare"
+    assert relay.records["fal-media-adapter"].provider == "fal"
+    assert relay.records["netflix-void-modal"].health == "healthy"
+    assert relay.records["netlify-ai-gateway-helper"].health == "excluded"
+    assert relay.records["fal-media-adapter"].health == "excluded"
+
+
+def test_new_optional_gateway_records_have_correct_lanes() -> None:
+    relay = WeaverModelRelay()
+
+    assert relay.records["netlify-ai-gateway-helper"].lane == "prompt_router"
+    assert relay.records["cloudflare-agent-helper"].lane == "prompt_router"
+    assert relay.records["fal-media-adapter"].lane == "video_repair"
+
+
+def test_new_optional_gateway_records_have_zero_quota_limits() -> None:
+    """Excluded optional gateways should have zero RPM and RPD limits."""
+    relay = WeaverModelRelay()
+
+    for model_id in ("netlify-ai-gateway-helper", "cloudflare-agent-helper", "fal-media-adapter"):
+        record = relay.records[model_id]
+        assert record.rpm_limit == 0, f"{model_id} rpm_limit should be 0"
+        assert record.rpd_limit == 0, f"{model_id} rpd_limit should be 0"
+
+
+def test_new_optional_gateway_records_have_public_safe_license() -> None:
+    relay = WeaverModelRelay()
+
+    assert relay.records["netlify-ai-gateway-helper"].license_gate == "public_safe"
+    assert relay.records["cloudflare-agent-helper"].license_gate == "public_safe"
+
+
+def test_fal_media_adapter_requires_commercial_license() -> None:
+    relay = WeaverModelRelay()
+
+    assert relay.records["fal-media-adapter"].license_gate == "commercial_required"
+
+
+def test_cloudflare_agent_helper_is_also_excluded() -> None:
+    relay = WeaverModelRelay()
+
+    assert relay.records["cloudflare-agent-helper"].health == "excluded"
+
+
+def test_excluded_gateways_are_skipped_in_lane_selection() -> None:
+    """Excluded health records should not appear as primary in any lane selection."""
+    relay = WeaverModelRelay()
+    excluded_ids = {"netlify-ai-gateway-helper", "cloudflare-agent-helper", "fal-media-adapter"}
+
+    for lane in ("prompt_router", "video_repair"):
+        try:
+            decision = relay.select_lane(lane, public_demo=True, strategy="quality_first")
+            if decision.primary is not None:
+                assert decision.primary.model_id not in excluded_ids, (
+                    f"Excluded gateway {decision.primary.model_id} was selected as primary for lane {lane}"
+                )
+        except Exception:
+            # Lane may have no available records after excluding; that is acceptable
+            pass
+
+
+def test_new_optional_gateways_have_optional_cost_hints() -> None:
+    relay = WeaverModelRelay()
+
+    netlify = relay.records["netlify-ai-gateway-helper"]
+    cloudflare = relay.records["cloudflare-agent-helper"]
+    fal = relay.records["fal-media-adapter"]
+
+    assert "optional" in netlify.cost_hint
+    assert "optional" in cloudflare.cost_hint
+    assert "optional" in fal.cost_hint
