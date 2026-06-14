@@ -89,12 +89,17 @@ def test_dashboard_regions_expose_artifacts_and_provider_cards() -> None:
 
     assert "Artifact Preview Lane" in regions["artifacts"]
     assert "nw-preview-stage" in regions["artifacts"]
+    assert "nw-preview-ribbon" in regions["artifacts"]
     assert "PRIMARY OUTPUT STAGE" in regions["artifacts"]
     assert "Forge Operations" in regions["operations"]
     assert "Provider Handoff Cards" in regions["providers"]
     assert "nw-provider-meter" in regions["providers"]
     assert "Selected: Forge" in regions["command_rail"]
     assert "ST3GG Scan" in regions["inspector"]
+    assert "nw-weave-console" in regions["workflow"]
+    assert "Hackathon Signal" in regions["workflow"]
+    assert "Boots / heels" in regions["drawer"]
+    assert "checkpointed" in regions["drawer"]
 
 
 def test_dashboard_regions_render_with_empty_relay_and_default_scan() -> None:
@@ -104,6 +109,7 @@ def test_dashboard_regions_render_with_empty_relay_and_default_scan() -> None:
     assert "not-started" in regions["operations"]
     assert "snapshot pending" in regions["providers"]
     assert "Selected: Forge" in regions["command_rail"]
+    assert "provider call remains checkpointed" in regions["artifacts"]
 
 
 def test_dashboard_operations_follow_selected_section() -> None:

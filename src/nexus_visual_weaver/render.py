@@ -120,6 +120,12 @@ def render_command_rail(active_section: str = "Forge") -> str:
 def render_workflow(run: GenerationRun | None = None) -> str:
     workflow = WorkflowState.default()
     score = run.checkpoint.trust_score if run else 0.82
+    checkpoint_id = run.checkpoint.checkpoint_id if run else "nw-dry-run"
+    recommendation = run.checkpoint.recommendation.replace("_", " ").title() if run else "Awaiting Run"
+    required_actions = run.checkpoint.required_actions if run else ["Review candidate thumbnails before promotion"]
+    action_label = required_actions[0] if required_actions else "No action pending"
+    model_label = _short_repo(run.model_stack[0].repo_id) if run and run.model_stack else "FLUX.2"
+    locate_label = run.inspection.locate_model.split("/")[-1] if run else "LocateAnything-3B"
     nodes = {
         "seed": (35, 52, 190, 210, "Seed Prompt", ["Rogue archivist moving", "through rain-slick neon", "city, couture layers."], "Text-to-Image (FLUX.2)", "complete", "red"),
         "refine": (275, 52, 185, 160, "Refine", ["Prompt Refiner", "Style Harmonizer", "Negative Purge"], "Qwen2.5-7B", "complete", "violet"),
@@ -186,6 +192,28 @@ def render_workflow(run: GenerationRun | None = None) -> str:
       <div class="nw-legend">
         {badge("Text Flow", "accent")} {badge("Refine Loop", "violet")} {badge("Policy Gate", "blue")} {badge("Media Flow", "cyan")} {badge("Human Gate", "warn")}
       </div>
+      <div class="nw-weave-console">
+        <div class="nw-console-card nw-console-primary">
+          <small>Selected Node</small>
+          <strong>Human Checkpoint</strong>
+          <span>{escape(recommendation)} / {escape(checkpoint_id)}</span>
+        </div>
+        <div class="nw-console-card">
+          <small>Next Operator Action</small>
+          <strong>{escape(action_label)}</strong>
+          <span>Checkpoint blocks video promotion until reviewed.</span>
+        </div>
+        <div class="nw-console-card">
+          <small>Pinned Model Lanes</small>
+          <strong>{escape(model_label)} + {escape(locate_label)} + ST3GG</strong>
+          <span>Core lanes stay fixed; helper lanes may rotate.</span>
+        </div>
+        <div class="nw-console-card">
+          <small>Hackathon Signal</small>
+          <strong>Workflow, governance, visual creation</strong>
+          <span>Judge view keeps product purpose visible without a landing page.</span>
+        </div>
+      </div>
     </section>
     """
 
@@ -217,6 +245,7 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
         for title, body, status, texture, index in artifacts
     )
     export_gate = str(scan.get("export_gate", "pending")).upper()
+    continuity = ", ".join(run.video.continuity_locks[:4]) if run else "outerwear, footwear, jewelry, NEXUS sigils"
     return f"""
     <section class="nw-panel nw-artifacts">
       <div class="nw-panel-head">
@@ -237,6 +266,11 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
           <div><small>export gate</small><strong>{escape(export_gate)}</strong></div>
           <div><small>preview mode</small><strong>Dry Run</strong></div>
         </div>
+      </div>
+      <div class="nw-preview-ribbon">
+        <span>{icon("security")} ST3GG before export</span>
+        <span>{icon("wardrobe")} continuity: {escape(continuity)}</span>
+        <span>{icon("models")} provider call remains checkpointed</span>
       </div>
       <div class="nw-artifact-grid">{cards}</div>
     </section>
@@ -307,6 +341,7 @@ def render_operations_panel(
         <div class="nw-operation-card">
           <small>{escape(title)}</small>
           <strong>{escape(body)}</strong>
+          <i></i>
         </div>
         """
         for title, body in panels[section]
@@ -480,36 +515,37 @@ def render_drawer(run: GenerationRun | None = None) -> str:
         beats = []
     slot_cards = "".join(
         f"""
-        <div class="nw-swatch">
+        <div class="nw-swatch {'is-locked' if slot.locked else ''}">
           <i class="nw-material-{idx % 6}"></i><strong>{escape(slot.name.replace("_", " ").title())}</strong>
           <small>{escape(slot.material.replace("_", " "))}</small>
+          <span>{'locked' if slot.locked else 'editable'} / p{slot.edit_priority}</span>
         </div>
         """
         for idx, slot in enumerate(slots[:8])
     )
     if not slot_cards:
         slot_cards = "".join(
-            f'<div class="nw-swatch"><i class="nw-material-{idx % 6}"></i><strong>{label}</strong><small>{mat}</small></div>'
+            f'<div class="nw-swatch"><i class="nw-material-{idx % 6}"></i><strong>{label}</strong><small>{mat}</small><span>editable / p{5 - idx // 2}</span></div>'
             for idx, (label, mat) in enumerate([
                 ("Patent Leather", "jet black"), ("Faux Fur", "ash gray"), ("Lace Mesh", "noir"),
                 ("Crimson Hardware", "polished"), ("Platform Boots", "matte black"), ("Long Coat", "wool blend"),
             ])
         )
     beat_cards = "".join(
-        f'<div class="nw-beat"><i class="nw-story-{idx % 6}"></i><strong>{escape(beat["id"])} {escape(beat["title"])}</strong><small>{escape(beat["cue"][:80])}</small><span class="nw-mini-chip">FLUX.2</span></div>'
+        f'<div class="nw-beat"><i class="nw-story-{idx % 6}"></i><strong>{escape(beat["id"])} {escape(beat["title"])}</strong><small>{escape(beat["cue"][:80])}</small><span class="nw-mini-chip">checkpointed</span></div>'
         for idx, beat in enumerate(beats[:6])
     )
     if not beat_cards:
-        beat_cards = "".join(f'<div class="nw-beat"><i class="nw-story-{i % 6}"></i><strong>0{i} Beat</strong><small>Scene continuity cue</small><span class="nw-mini-chip">FLUX.2</span></div>' for i in range(1, 7))
+        beat_cards = "".join(f'<div class="nw-beat"><i class="nw-story-{i % 6}"></i><strong>0{i} Beat</strong><small>Scene continuity cue</small><span class="nw-mini-chip">checkpointed</span></div>' for i in range(1, 7))
     return f"""
     <section class="nw-bottom">
       <div class="nw-panel nw-wardrobe">
-        <div class="nw-panel-head"><strong>Outfit Wardrobe</strong><span class="nw-chip">All Categories</span></div>
-        <div class="nw-filter-row"><span>All</span><span>Materials</span><span>Hardware</span><span>Footwear</span><span>Layers</span><span>Textures</span></div>
+        <div class="nw-panel-head"><div><strong>Outfit Wardrobe</strong><small>Couture slots, locks, LocateAnything regions, and edit priority</small></div><span class="nw-chip">All Categories</span></div>
+        <div class="nw-filter-row"><span>All</span><span>Patent</span><span>Lace</span><span>Hardware</span><span>Boots / heels</span><span>Outerwear</span><span>Props</span></div>
         <div class="nw-swatches">{slot_cards}</div>
       </div>
       <div class="nw-panel nw-lore">
-        <div class="nw-panel-head"><strong>Lore-to-Video Timeline</strong><div class="nw-tools nw-static-tools"><span>6 Beats</span><span>24 FPS</span></div></div>
+        <div class="nw-panel-head"><div><strong>Lore-to-Video Timeline</strong><small>Identity, garment meaning, motion cue, and video checkpoint path</small></div><div class="nw-tools nw-static-tools"><span>6 Beats</span><span>24 FPS</span></div></div>
         <div class="nw-beats">{beat_cards}</div>
       </div>
     </section>

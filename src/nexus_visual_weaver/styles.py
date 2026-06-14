@@ -263,6 +263,46 @@ footer { display: none !important; }
 .nw-thumb-2 { fill: #33111b; }
 .nw-thumb-3 { fill: #0f2630; }
 .nw-legend { padding: 0 16px 13px; display: flex; gap: 8px; flex-wrap: wrap; }
+.nw-weave-console {
+  display: grid;
+  grid-template-columns: 1.1fr 1.4fr 1.25fr 1.35fr;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+.nw-console-card {
+  min-height: 88px;
+  border: 1px solid var(--nw-line);
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.04), transparent 40%),
+    rgba(255,255,255,.018);
+  padding: 10px;
+  display: grid;
+  align-content: space-between;
+  gap: 5px;
+}
+.nw-console-primary {
+  border-color: rgba(255,54,95,.36);
+  background:
+    linear-gradient(135deg, rgba(255,54,95,.14), transparent 48%),
+    rgba(255,255,255,.02);
+}
+.nw-console-card small {
+  color: var(--nw-faint);
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+.nw-console-card strong {
+  color: var(--nw-text);
+  font-size: 12px;
+  line-height: 1.25;
+}
+.nw-console-card span {
+  color: var(--nw-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
 .nw-badge {
   display: inline-flex;
   align-items: center;
@@ -367,6 +407,12 @@ footer { display: none !important; }
 .nw-swatches, .nw-beats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(112px, 1fr); gap: 8px; overflow-x: auto; padding: 12px; }
 .nw-beats { grid-auto-columns: minmax(128px, 1fr); }
 .nw-swatch, .nw-beat { min-height: 134px; border: 1px solid var(--nw-line); border-radius: 6px; padding: 7px; background: rgba(255,255,255,.024); display: grid; align-content: start; gap: 6px; }
+.nw-swatch.is-locked {
+  border-color: rgba(38,215,130,.34);
+  background:
+    linear-gradient(135deg, rgba(38,215,130,.08), transparent 42%),
+    rgba(255,255,255,.024);
+}
 .nw-swatch i, .nw-beat i {
   display: block; height: 72px; border-radius: 5px;
   border: 1px solid #303841;
@@ -386,6 +432,14 @@ footer { display: none !important; }
 .nw-story-5 { background: linear-gradient(135deg, #111820, #333b43 45%, #0a0d11); }
 .nw-swatch strong, .nw-beat strong { font-size: 11px; color: var(--nw-text); line-height: 1.25; }
 .nw-swatch small, .nw-beat small { font-size: 10px; color: var(--nw-muted); line-height: 1.3; }
+.nw-swatch span {
+  width: fit-content;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 5px;
+  color: var(--nw-faint);
+  font-size: 10px;
+  padding: 2px 6px;
+}
 .nw-beat select { min-height: 24px; width: 100%; padding: 2px 5px; color: var(--nw-muted); }
 .nw-catalog { padding: 16px; }
 .nw-catalog table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -622,6 +676,32 @@ footer { display: none !important; }
   font-size: 12px;
   line-height: 1.25;
 }
+.nw-preview-ribbon {
+  margin: 10px 12px 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.nw-preview-ribbon span {
+  min-height: 34px;
+  border: 1px solid var(--nw-line);
+  border-radius: 6px;
+  background: rgba(255,255,255,.02);
+  color: #cfd8df;
+  font-size: 11px;
+  line-height: 1.3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  min-width: 0;
+}
+.nw-preview-ribbon .nw-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--nw-cyan);
+}
 .nw-operations {
   overflow: hidden;
 }
@@ -654,6 +734,14 @@ footer { display: none !important; }
   font-size: 12px;
   line-height: 1.4;
   font-weight: 560;
+}
+.nw-operation-card i {
+  display: block;
+  height: 5px;
+  border-radius: 6px;
+  background:
+    linear-gradient(90deg, var(--nw-cyan), rgba(32,217,232,.18) 68%, rgba(255,255,255,.06));
+  box-shadow: 0 0 14px rgba(32,217,232,.14);
 }
 .nw-artifact-grid {
   padding: 12px;
@@ -775,6 +863,7 @@ footer { display: none !important; }
   .nw-command-header, .nw-preview-stage, .nw-preview-frame { grid-template-columns: 1fr; }
   .nw-command-pills { justify-content: flex-start; }
   .nw-operation-grid { grid-template-columns: 1fr; }
+  .nw-weave-console, .nw-preview-ribbon { grid-template-columns: 1fr; }
   .nw-artifact-grid, .nw-provider-grid { grid-template-columns: 1fr 1fr; }
   .nw-graph { min-height: 430px; }
   .nw-statusbar { grid-template-columns: 1fr 1fr; height: auto; }
