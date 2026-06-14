@@ -103,25 +103,7 @@ def run_weave(
     adult_mode: bool,
     upload: Any,
     active_section: str,
-) -> tuple[
-    str,
-    str,
-    str,
-    str,
-    str,
-    str,
-    str,
-    str,
-    str,
-    str,
-    dict[str, Any],
-    dict[str, Any],
-    dict[str, Any],
-    Any,
-    dict[str, Any],
-    dict[str, Any],
-    Any,
-]:
+) -> tuple[str, str, str, str, str, str, str, str, str, str, dict[str, Any], dict[str, Any], dict[str, Any]]:
     prompt = prompt.strip() or DEFAULT_PROMPT
     run = build_command_center_run(
         prompt=prompt,
@@ -171,7 +153,7 @@ def toggle_adult_visibility(
     adult_mode: bool,
     active_section: str,
     upload: Any,
-) -> tuple[str, str, str, str, str, str, str, dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[str, str, str, str, str, str, str, dict[str, Any], dict[str, Any]]:
     scan = scan_file(_file_path(upload))
     operator_state = {
         **_default_operator_state(),
@@ -250,6 +232,11 @@ def _render_stateful(
         operator_state,
         gr.update(interactive=run is not None and operator_state.get("provider_state") not in {"idle", "stopped", "exported"}),
     )
+    upload: Any,
+) -> tuple[str, str, str, str, str, dict[str, Any]]:
+    scan = scan_file(_file_path(upload))
+    regions = _dashboard_regions(adult_mode=adult_mode, scan=scan, active_section=active_section)
+    return regions["command_rail"], regions["operations"], regions["inspector"], regions["artifacts"], regions["providers"], scan
 
 
 def scan_reference(
@@ -457,12 +444,42 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
         fn=run_weave,
         inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav],
         outputs=stateful_outputs,
+        outputs=[
+            topbar_html,
+            command_rail_html,
+            workflow_html,
+            operations_html,
+            inspector_html,
+            drawer_html,
+            status_html,
+            artifact_html,
+            provider_html,
+            catalog_html,
+            run_json,
+            catalog_json,
+            scan_json,
+        ],
         api_name="run_active_weave",
     )
     prompt.submit(
         fn=run_weave,
         inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav],
         outputs=stateful_outputs,
+        outputs=[
+            topbar_html,
+            command_rail_html,
+            workflow_html,
+            operations_html,
+            inspector_html,
+            drawer_html,
+            status_html,
+            artifact_html,
+            provider_html,
+            catalog_html,
+            run_json,
+            catalog_json,
+            scan_json,
+        ],
         api_name=False,
     )
     adult_mode.change(
@@ -485,6 +502,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
     section_nav.change(
         fn=refresh_section,
         inputs=[section_nav, adult_mode, active_run_state, scan_state, operator_state],
+        inputs=[section_nav, adult_mode, upload],
         outputs=[command_rail_html, operations_html, inspector_html, artifact_html, provider_html, scan_json],
         api_name=False,
     )

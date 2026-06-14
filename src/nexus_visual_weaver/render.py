@@ -81,6 +81,7 @@ def render_command_header() -> str:
     Returns:
         str: HTML markup for the command input header.
     """
+def render_command_header() -> str:
     return f"""
     <section class="nw-command-header">
       <div>
@@ -204,6 +205,9 @@ def render_workflow(run: GenerationRun | None = None, operator_state: dict | Non
         action_label = "Checkpoint approved; export packet may be prepared after ST3GG gate."
     elif provider_state == "stopped":
         action_label = "Provider handoff stopped; dry-run evidence remains available."
+    recommendation = run.checkpoint.recommendation.replace("_", " ").title() if run else "Awaiting Run"
+    required_actions = run.checkpoint.required_actions if run else ["Review candidate thumbnails before promotion"]
+    action_label = required_actions[0] if required_actions else "No action pending"
     model_label = _short_repo(run.model_stack[0].repo_id) if run and run.model_stack else "FLUX.2"
     locate_label = run.inspection.locate_model.split("/")[-1] if run else "LocateAnything-3B"
     nodes = {
@@ -294,6 +298,28 @@ def render_workflow(run: GenerationRun | None = None, operator_state: dict | Non
           <span>Judge view keeps product purpose visible without a landing page.</span>
         </div>
       </div>
+      <div class="nw-weave-console">
+        <div class="nw-console-card nw-console-primary">
+          <small>Selected Node</small>
+          <strong>Human Checkpoint</strong>
+          <span>{escape(recommendation)} / {escape(checkpoint_id)}</span>
+        </div>
+        <div class="nw-console-card">
+          <small>Next Operator Action</small>
+          <strong>{escape(action_label)}</strong>
+          <span>Checkpoint blocks video promotion until reviewed.</span>
+        </div>
+        <div class="nw-console-card">
+          <small>Pinned Model Lanes</small>
+          <strong>{escape(model_label)} + {escape(locate_label)} + ST3GG</strong>
+          <span>Core lanes stay fixed; helper lanes may rotate.</span>
+        </div>
+        <div class="nw-console-card">
+          <small>Hackathon Signal</small>
+          <strong>Workflow, governance, visual creation</strong>
+          <span>Judge view keeps product purpose visible without a landing page.</span>
+        </div>
+      </div>
     </section>
     """
 
@@ -338,6 +364,12 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
         (outfit_label, "Wardrobe slots and locks", "checkpointed", "material-1", "02"),
         (locate_label, "LocateAnything region plan", "configured", "material-4", "03"),
         (video_label, "Checkpointed storyboard", "blocked" if scan.get("export_gate") == "blocked" or provider_state == "blocked" else "ready", "story-2", "04"),
+    checkpoint = getattr(run.checkpoint, "recommendation", "pending") if run else "pending"
+    artifacts = [
+        (prompt_label, "Taste-refined brief", "dry-run", "material-0", "01"),
+        (outfit_label, "Wardrobe slots and locks", "dry-run", "material-1", "02"),
+        (locate_label, "LocateAnything region plan", "dry-run", "material-4", "03"),
+        (video_label, "Checkpointed storyboard", "blocked" if scan.get("export_gate") == "blocked" else "ready", "story-2", "04"),
     ]
     cards = "".join(
         f"""
@@ -366,18 +398,25 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
             <small>PRIMARY OUTPUT STAGE / {escape(generated_status.upper() or "JUDGE-SAFE DEMO OUTPUT")} / SEED {escape(demo_seed)}</small>
             <strong>{'Real FLUX.2 Klein artifact' if generated_uri else 'Deterministic Raven Chronicle proof frame'}</strong>
             <span>{escape(generated_message or active_prompt)}</span>
+          <i class="nw-preview-image"></i>
+          <div class="nw-preview-caption">
+            <small>PRIMARY OUTPUT STAGE</small>
+            <strong>Generated artifact preview will land here</strong>
+            <span>{escape(active_prompt)}</span>
           </div>
         </div>
         <div class="nw-preview-meta">
           <div><small>checkpoint</small><strong>{escape(str(checkpoint).replace("_", " ").title())}</strong></div>
           <div><small>export gate</small><strong>{escape(export_gate)}</strong></div>
           <div><small>preview mode</small><strong>{escape(preview_mode)}</strong></div>
+          <div><small>preview mode</small><strong>Dry Run</strong></div>
         </div>
       </div>
       <div class="nw-preview-ribbon">
         <span>{icon("security")} ST3GG before export</span>
         <span>{icon("wardrobe")} continuity: {escape(continuity)}</span>
         <span>{icon("models")} provider call remains checkpointed; state: dry-run / configured / blocked / failed / exported; current: {escape(provider_state)}</span>
+        <span>{icon("models")} provider call remains checkpointed</span>
       </div>
       <div class="nw-artifact-grid">{cards}</div>
     </section>
@@ -411,6 +450,9 @@ def render_operations_panel(
     scan = scan or {"status": "idle", "export_gate": "pending", "findings": []}
     relay_status = relay_status or {}
     operator_state = operator_state or {}
+) -> str:
+    scan = scan or {"status": "idle", "export_gate": "pending", "findings": []}
+    relay_status = relay_status or {}
     section = active_section if active_section in {"Forge", "Wardrobe", "Lore", "Models", "Security", "Runs"} else "Forge"
     checkpoint = getattr(run, "checkpoint", None) if run else None
     outfit = getattr(run, "outfit", None) if run else None
@@ -431,6 +473,7 @@ def render_operations_panel(
             ("Prompt contract", "Taste-refined prompt, material locks, negative purge, and checkpoint requirements."),
             ("Active run", f"{run_id} / checkpoint remains human-reviewed before video promotion."),
             ("Provider posture", f"{provider_state}: {operator_message}"),
+            ("Provider posture", "Dry-run packets are visible before paid or gated calls."),
         ],
         "Wardrobe": [
             ("Slot coverage", f"{outfit_count or 9} garment/accessory regions tracked with locks and edit priority."),
@@ -459,6 +502,7 @@ def render_operations_panel(
         "Runs": [
             ("Current checkpoint", run_id),
             ("Ledger mode", f"Operator state: {provider_state}. Run JSON, catalog summary, and ST3GG evidence remain in the evidence accordion."),
+            ("Ledger mode", "Run JSON, catalog summary, and ST3GG evidence remain in the evidence accordion."),
             ("Rollback path", "Feature branches and draft PRs carry implementation checkpoints."),
         ],
     }
@@ -579,6 +623,8 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
               <span>{escape(str(provider))} / {escape(str(gate))}</span>
               <i class="nw-provider-meter" style="--health:{'86' if provider_state in {'configured', 'dry-run'} else '52' if provider_state == 'limited' else '22'}"></i>
               <div>{badge(provider_state.upper(), tone)}{badge("CHECKPOINTED", "muted")}</div>
+              <i class="nw-provider-meter" style="--health:{'86' if status == 'ready' else '52' if status == 'limited' else '22'}"></i>
+              <div>{badge(str(status).upper(), tone)}{badge("DRY-RUN", "muted")}</div>
             </div>
             """
         )
@@ -829,6 +875,8 @@ def render_dashboard_regions(
         "command_rail": render_command_rail(active_section),
         "workflow": render_workflow(run, operator_state),
         "operations": render_operations_panel(active_section, run, scan, relay_status, adult_mode=adult_mode, operator_state=operator_state),
+        "workflow": render_workflow(run),
+        "operations": render_operations_panel(active_section, run, scan, relay_status, adult_mode=adult_mode),
         "inspector": render_inspector(run, scan, relay_status),
         "drawer": render_drawer(run),
         "status": render_status_bar(operator_state),
