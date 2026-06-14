@@ -163,7 +163,7 @@ def judge_with_minicpm(
             evidence=evidence or {"raw_summary": content[:1200]},
             latency_seconds=round(time.perf_counter() - started, 2),
         )
-    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+    except Exception as exc:
         return ProviderJudgeResult(
             status="failed",
             provider_state="failed",
