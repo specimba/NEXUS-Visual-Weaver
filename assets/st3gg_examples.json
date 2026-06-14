@@ -1,0 +1,22 @@
+{
+  "version": "v2.3",
+  "trust_model": "Generation is not export. Every artifact must pass ST3GG scan, purification, and human checkpoint before release.",
+  "examples": [
+    {
+      "id": "safe_clean_png",
+      "label": "Safe clean PNG",
+      "filename": "st3gg_safe_clean.png",
+      "expected_status": "pass",
+      "expected_export_gate": "clear",
+      "note": "Valid PNG signature and no trailing bytes after IEND."
+    },
+    {
+      "id": "blocked_png_trailing_data",
+      "label": "Blocked PNG with trailing data",
+      "filename": "st3gg_blocked_trailing.png",
+      "expected_status": "review",
+      "expected_export_gate": "blocked",
+      "note": "Valid PNG signature with extra bytes after the IEND marker."
+    }
+  ]
+}

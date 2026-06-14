@@ -9,7 +9,6 @@ from pathlib import Path
 
 from .catalog import catalog_summary, parameter_budget
 from .schema import GenerationRun
-from .workflow import WorkflowState
 
 
 def badge(label: str, tone: str = "neutral") -> str:
@@ -49,11 +48,45 @@ def _env_configured(*names: str) -> bool:
     return any(bool(os.environ.get(name)) for name in names)
 
 
+def _provider_configured(base_url_name: str, *key_names: str) -> bool:
+    return bool(os.environ.get(base_url_name)) and _env_configured(*key_names)
+
+
+_SCAN_REDACTION_TERMS = (
+    "payload",
+    "payload_excerpt",
+    "hidden content",
+    "recovered",
+    "raw byte",
+    "base64",
+    "hex dump",
+)
+
+
+def _redact_scan_text(value: object) -> str:
+    text = str(value)
+    lowered = text.lower()
+    if any(term in lowered for term in _SCAN_REDACTION_TERMS):
+        return "Redacted scan detail; review the gated ST3GG evidence packet."
+    if len(text) > 180:
+        return text[:177] + "..."
+    return text
+
+
 def _space_runtime_status() -> dict[str, str]:
     space_id = os.environ.get("SPACE_ID") or os.environ.get("HF_SPACE_ID") or "local-preview"
     hardware = os.environ.get("SPACE_HARDWARE") or os.environ.get("NEXUS_SPACE_HARDWARE") or "ZeroGPU"
     bucket = "/data mounted" if os.path.isdir("/data") else "bucket optional"
-    secrets = "providers configured" if _env_configured("FAL_KEY", "NETLIFY_AUTH_TOKEN", "OPENAI_API_KEY", "MODAL_TOKEN_ID") else "no provider secrets"
+    configured = []
+    if _env_configured("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"):
+        configured.append("HF")
+    if _provider_configured("MINICPM_BASE_URL", "MINICPM_API_KEY", "OPENBMB_API_KEY"):
+        configured.append("MiniCPM")
+    if _provider_configured("NEMOTRON_BASE_URL", "NEMOTRON_API_KEY", "NVIDIA_API_KEY"):
+        configured.append("Nemotron")
+    if _env_configured("FAL_KEY", "NETLIFY_AUTH_TOKEN", "OPENAI_API_KEY", "MODAL_TOKEN_ID"):
+        configured.append("optional")
+    secrets = "configured: " + ", ".join(configured) if configured else "no provider secrets"
     return {
         "space_id": space_id,
         "hardware": hardware,
@@ -75,13 +108,6 @@ def _image_data_uri(path: str | None) -> str | None:
 
 
 def render_command_header() -> str:
-    """
-    Render the command input header section with mode and policy badges.
-    
-    Returns:
-        str: HTML markup for the command input header.
-    """
-def render_command_header() -> str:
     return f"""
     <section class="nw-command-header">
       <div>
@@ -92,14 +118,47 @@ def render_command_header() -> str:
       <div class="nw-command-pills">
         {badge("SFW DEFAULT", "pass")}
         {badge("ST3GG ALWAYS ON", "cyan")}
-        {badge("FLUX.2 PINNED", "accent")}
+        {badge("FLUX.2 4B PINNED", "accent")}
         {badge("HUMAN CHECKPOINT", "warn")}
       </div>
     </section>
     """
 
 
-def render_topbar(adult_mode: bool = False, relay_status: dict | None = None) -> str:
+def render_trust_strip(scan: dict | None = None, operator_state: dict | None = None) -> str:
+    scan = scan or {"status": "idle", "export_gate": "pending", "findings": [], "purification_actions": []}
+    operator_state = operator_state or {}
+    status = str(scan.get("status", "idle")).upper()
+    export_gate = str(scan.get("export_gate", "pending")).upper()
+    checkpoint = str(operator_state.get("checkpoint", "pending")).replace("_", " ").title()
+    findings = [_redact_scan_text(item) for item in (scan.get("findings") or ["No upload selected. Always-on scanner ready."])]
+    actions = [_redact_scan_text(item) for item in (scan.get("purification_actions") or [
+        "strip metadata before export",
+        "truncate PNG after IEND when needed",
+        "run LSB statistical review",
+    ])]
+    tone = _scan_status_tone(str(scan.get("status", "idle")))
+    return f"""
+    <section class="nw-trust-strip">
+      <div class="nw-trust-primary">
+        <small>TRUST MODEL</small>
+        <strong>Generation is not export.</strong>
+        <span>Every artifact must pass ST3GG scan, purification, and human checkpoint before release.</span>
+      </div>
+      <div class="nw-trust-card">{badge(f"ST3GG {status}", tone)}<span>{escape(str(findings[0]))}</span></div>
+      <div class="nw-trust-card">{badge(f"EXPORT {export_gate}", "pass" if export_gate == "CLEAR" else "warn" if export_gate == "BLOCKED" else "muted")}<span>{escape(str(actions[0]))}</span></div>
+      <div class="nw-trust-card">{badge(f"CHECKPOINT {checkpoint.upper()}", "pass" if checkpoint == "Approved" else "muted")}<span>Adult Mode never bypasses safety, consent, provenance, or dataset gates.</span></div>
+      <div class="nw-trust-card nw-trust-examples">{badge("FIXTURE EVIDENCE", "cyan")}<span>Clean PNG -> pass. PNG trailing bytes -> blocked.</span></div>
+    </section>
+    """
+
+
+def render_topbar(
+    adult_mode: bool = False,
+    relay_status: dict | None = None,
+    scan: dict | None = None,
+    operator_state: dict | None = None,
+) -> str:
     """
     Renders the application topbar with budget metrics, relay status, and adult mode controls.
     
@@ -136,6 +195,7 @@ def render_topbar(adult_mode: bool = False, relay_status: dict | None = None) ->
       </div>
       <div class="nw-locked"><b>18+</b><span>Locked. Enable in Security with explicit justification.</span></div>
     </div>
+    {render_trust_strip(scan, operator_state)}
     """
 
 
@@ -176,24 +236,8 @@ def render_command_rail(active_section: str = "Forge") -> str:
     """
 
 
-def render_workflow(run: GenerationRun | None = None) -> str:
-    """
-    Render an interactive workflow visualization panel displaying the NEXUS processing pipeline.
-    
-    Derives workflow labels (checkpoint, recommendation, actions, models) from the provided run object
-    if available; otherwise displays defaults.
-    
-    Parameters:
-        run (GenerationRun | None): Optional generation run providing checkpoint, model stack, and
-            inspection data. If None, displays placeholder values.
-    
-    Returns:
-        str: HTML section containing a workflow diagram with nodes, edges, legend, and
-            operator console.
-    """
 def render_workflow(run: GenerationRun | None = None, operator_state: dict | None = None) -> str:
     operator_state = operator_state or {}
-    workflow = WorkflowState.default()
     score = run.checkpoint.trust_score if run else 0.82
     checkpoint_id = run.checkpoint.checkpoint_id if run else "nw-dry-run"
     checkpoint_status = str(operator_state.get("checkpoint", "pending_review" if run else "pending"))
@@ -205,17 +249,14 @@ def render_workflow(run: GenerationRun | None = None, operator_state: dict | Non
         action_label = "Checkpoint approved; export packet may be prepared after ST3GG gate."
     elif provider_state == "stopped":
         action_label = "Provider handoff stopped; dry-run evidence remains available."
-    recommendation = run.checkpoint.recommendation.replace("_", " ").title() if run else "Awaiting Run"
-    required_actions = run.checkpoint.required_actions if run else ["Review candidate thumbnails before promotion"]
-    action_label = required_actions[0] if required_actions else "No action pending"
     model_label = _short_repo(run.model_stack[0].repo_id) if run and run.model_stack else "FLUX.2"
     locate_label = run.inspection.locate_model.split("/")[-1] if run else "LocateAnything-3B"
     nodes = {
         "seed": (35, 52, 190, 210, "Seed Prompt", ["Rogue archivist moving", "through rain-slick neon", "city, couture layers."], "Text-to-Image (FLUX.2)", "complete", "red"),
         "refine": (275, 52, 185, 160, "Refine", ["Prompt Refiner", "Style Harmonizer", "Negative Purge"], "Qwen2.5-7B", "complete", "violet"),
-        "judge": (540, 52, 185, 160, "Judge", ["Aesthetic Scorer", "ST3GG Policy Filter", f"Score {score:.2f}"], "OFFELLIA / Gemma", "complete", "blue"),
+        "judge": (540, 52, 185, 160, "Judge", ["Aesthetic Scorer", "ST3GG Policy Filter", f"Score {score:.2f}"], "MiniCPM / Nemotron", "complete", "blue"),
         "locate": (785, 52, 185, 160, "Locate", ["Reference Locator", "Pose & Composition", "IP-Adapter"], "Refs 3/5", "complete", "cyan"),
-        "generate": (275, 280, 235, 210, "Generate", ["Image / Video Generation", "FLUX.2 + adapter stack", "High-detail couture"], "Steps 30  CFG 7.5", "ready", "green"),
+        "generate": (275, 280, 235, 210, "Generate", ["Image / Video Generation", "FLUX.2 4B + adapter stack", "High-detail couture"], "Steps 4  CFG 1.0", "ready", "green"),
         "video": (590, 280, 235, 210, "Video Path", ["Image to Video", "Frame interpolation", run.video.preset if run else "Wan2.2 / LTX swap"], "Duration 5.6s  24fps", "ready", "blue"),
         "checkpoint": (880, 285, 185, 185, "Human Checkpoint", ["Human review required", "Verify intent, vibe,", "and output before final."], "Review Now", "paused", "amber"),
     }
@@ -298,43 +339,10 @@ def render_workflow(run: GenerationRun | None = None, operator_state: dict | Non
           <span>Judge view keeps product purpose visible without a landing page.</span>
         </div>
       </div>
-      <div class="nw-weave-console">
-        <div class="nw-console-card nw-console-primary">
-          <small>Selected Node</small>
-          <strong>Human Checkpoint</strong>
-          <span>{escape(recommendation)} / {escape(checkpoint_id)}</span>
-        </div>
-        <div class="nw-console-card">
-          <small>Next Operator Action</small>
-          <strong>{escape(action_label)}</strong>
-          <span>Checkpoint blocks video promotion until reviewed.</span>
-        </div>
-        <div class="nw-console-card">
-          <small>Pinned Model Lanes</small>
-          <strong>{escape(model_label)} + {escape(locate_label)} + ST3GG</strong>
-          <span>Core lanes stay fixed; helper lanes may rotate.</span>
-        </div>
-        <div class="nw-console-card">
-          <small>Hackathon Signal</small>
-          <strong>Workflow, governance, visual creation</strong>
-          <span>Judge view keeps product purpose visible without a landing page.</span>
-        </div>
-      </div>
     </section>
     """
 
 
-def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = None) -> str:
-    """
-    Render the artifact preview lane section with generated artifacts and checkpoint metadata.
-    
-    Parameters:
-    	run (GenerationRun | None): Current generation run; if None, displays dry-run placeholders.
-    	scan (dict | None): Scan status including export_gate; defaults to idle/pending if not provided.
-    
-    Returns:
-    	str: HTML for the artifact preview lane section with preview stage, metadata, and artifact grid.
-    """
 def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = None, operator_state: dict | None = None) -> str:
     scan = scan or {"status": "idle", "export_gate": "pending"}
     operator_state = operator_state or {}
@@ -364,12 +372,6 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
         (outfit_label, "Wardrobe slots and locks", "checkpointed", "material-1", "02"),
         (locate_label, "LocateAnything region plan", "configured", "material-4", "03"),
         (video_label, "Checkpointed storyboard", "blocked" if scan.get("export_gate") == "blocked" or provider_state == "blocked" else "ready", "story-2", "04"),
-    checkpoint = getattr(run.checkpoint, "recommendation", "pending") if run else "pending"
-    artifacts = [
-        (prompt_label, "Taste-refined brief", "dry-run", "material-0", "01"),
-        (outfit_label, "Wardrobe slots and locks", "dry-run", "material-1", "02"),
-        (locate_label, "LocateAnything region plan", "dry-run", "material-4", "03"),
-        (video_label, "Checkpointed storyboard", "blocked" if scan.get("export_gate") == "blocked" else "ready", "story-2", "04"),
     ]
     cards = "".join(
         f"""
@@ -398,25 +400,18 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
             <small>PRIMARY OUTPUT STAGE / {escape(generated_status.upper() or "JUDGE-SAFE DEMO OUTPUT")} / SEED {escape(demo_seed)}</small>
             <strong>{'Real FLUX.2 Klein artifact' if generated_uri else 'Deterministic Raven Chronicle proof frame'}</strong>
             <span>{escape(generated_message or active_prompt)}</span>
-          <i class="nw-preview-image"></i>
-          <div class="nw-preview-caption">
-            <small>PRIMARY OUTPUT STAGE</small>
-            <strong>Generated artifact preview will land here</strong>
-            <span>{escape(active_prompt)}</span>
           </div>
         </div>
         <div class="nw-preview-meta">
           <div><small>checkpoint</small><strong>{escape(str(checkpoint).replace("_", " ").title())}</strong></div>
           <div><small>export gate</small><strong>{escape(export_gate)}</strong></div>
           <div><small>preview mode</small><strong>{escape(preview_mode)}</strong></div>
-          <div><small>preview mode</small><strong>Dry Run</strong></div>
         </div>
       </div>
       <div class="nw-preview-ribbon">
         <span>{icon("security")} ST3GG before export</span>
         <span>{icon("wardrobe")} continuity: {escape(continuity)}</span>
         <span>{icon("models")} provider call remains checkpointed; state: dry-run / configured / blocked / failed / exported; current: {escape(provider_state)}</span>
-        <span>{icon("models")} provider call remains checkpointed</span>
       </div>
       <div class="nw-artifact-grid">{cards}</div>
     </section>
@@ -450,9 +445,6 @@ def render_operations_panel(
     scan = scan or {"status": "idle", "export_gate": "pending", "findings": []}
     relay_status = relay_status or {}
     operator_state = operator_state or {}
-) -> str:
-    scan = scan or {"status": "idle", "export_gate": "pending", "findings": []}
-    relay_status = relay_status or {}
     section = active_section if active_section in {"Forge", "Wardrobe", "Lore", "Models", "Security", "Runs"} else "Forge"
     checkpoint = getattr(run, "checkpoint", None) if run else None
     outfit = getattr(run, "outfit", None) if run else None
@@ -473,7 +465,6 @@ def render_operations_panel(
             ("Prompt contract", "Taste-refined prompt, material locks, negative purge, and checkpoint requirements."),
             ("Active run", f"{run_id} / checkpoint remains human-reviewed before video promotion."),
             ("Provider posture", f"{provider_state}: {operator_message}"),
-            ("Provider posture", "Dry-run packets are visible before paid or gated calls."),
         ],
         "Wardrobe": [
             ("Slot coverage", f"{outfit_count or 9} garment/accessory regions tracked with locks and edit priority."),
@@ -494,7 +485,7 @@ def render_operations_panel(
             ("ST3GG state", f"{scan_status} / export {export_gate}"),
             (
                 "Findings",
-                "; ".join(str(item) for item in (scan.get("findings") or [])[:2])
+                "; ".join(_redact_scan_text(item) for item in (scan.get("findings") or [])[:2])
                 or ("No findings." if scan_status != "IDLE" else "No upload selected."),
             ),
             ("Public export", "Consent, provenance, metadata, age, dataset, and payload gates stay active."),
@@ -502,7 +493,6 @@ def render_operations_panel(
         "Runs": [
             ("Current checkpoint", run_id),
             ("Ledger mode", f"Operator state: {provider_state}. Run JSON, catalog summary, and ST3GG evidence remain in the evidence accordion."),
-            ("Ledger mode", "Run JSON, catalog summary, and ST3GG evidence remain in the evidence accordion."),
             ("Rollback path", "Feature branches and draft PRs carry implementation checkpoints."),
         ],
     }
@@ -579,7 +569,7 @@ def _render_relay_panel(relay_status: dict | None = None) -> str:
     <h3>GMR ModelRelay</h3>
     <ul class="nw-relay">{rows}</ul>
     <div class="nw-relay-foot">
-      {badge("FLUX.2 pinned", "pass")} {badge("LocateAnything pinned", "pass")} {badge(f"dedup hits {dedup_hits}", "muted")}
+      {badge("FLUX.2 4B pinned", "pass")} {badge("LocateAnything pinned", "pass")} {badge(f"dedup hits {dedup_hits}", "muted")}
     </div>
     """
 
@@ -598,6 +588,8 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
     relay_status = relay_status or {}
     decisions = relay_status.get("decisions", [])
     optional_statuses = {
+        "openbmb": "configured" if _provider_configured("MINICPM_BASE_URL", "MINICPM_API_KEY", "OPENBMB_API_KEY") else "missing secret",
+        "nvidia": "configured" if _provider_configured("NEMOTRON_BASE_URL", "NEMOTRON_API_KEY", "NVIDIA_API_KEY") else "missing secret",
         "fal": "configured" if _env_configured("FAL_KEY") else "blocked",
         "netlify": "configured" if _env_configured("NETLIFY_AUTH_TOKEN", "NETLIFY_SITE_ID", "OPENAI_BASE_URL") else "blocked",
         "cloudflare": "configured" if _env_configured("CLOUDFLARE_API_TOKEN", "CF_ACCOUNT_ID") else "blocked",
@@ -623,8 +615,6 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
               <span>{escape(str(provider))} / {escape(str(gate))}</span>
               <i class="nw-provider-meter" style="--health:{'86' if provider_state in {'configured', 'dry-run'} else '52' if provider_state == 'limited' else '22'}"></i>
               <div>{badge(provider_state.upper(), tone)}{badge("CHECKPOINTED", "muted")}</div>
-              <i class="nw-provider-meter" style="--health:{'86' if status == 'ready' else '52' if status == 'limited' else '22'}"></i>
-              <div>{badge(str(status).upper(), tone)}{badge("DRY-RUN", "muted")}</div>
             </div>
             """
         )
@@ -638,7 +628,7 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
               <strong>{escape(provider.title())}</strong>
               <span>off by default / secrets required</span>
               <i class="nw-provider-meter" style="--health:{'74' if state == 'configured' else '18'}"></i>
-              <div>{badge(state.upper(), "pass" if state == "configured" else "warn")}{badge("NOT MVP DEFAULT", "muted")}</div>
+              <div>{badge(state.upper(), "pass" if state == "configured" else "warn")}{badge("SPONSOR LANE" if provider in {"openbmb", "nvidia", "hf_nvidia"} else "NOT MVP DEFAULT", "muted")}</div>
             </div>
             """
         )
@@ -662,7 +652,12 @@ def _scan_status_tone(scan_status: str) -> str:
     return "muted"
 
 
-def render_inspector(run: GenerationRun | None = None, scan: dict | None = None, relay_status: dict | None = None) -> str:
+def render_inspector(
+    run: GenerationRun | None = None,
+    scan: dict | None = None,
+    relay_status: dict | None = None,
+    operator_state: dict | None = None,
+) -> str:
     if run:
         checks = [
             ("Patent Leather", True),
@@ -678,16 +673,26 @@ def render_inspector(run: GenerationRun | None = None, scan: dict | None = None,
         scan_status = (scan or {}).get("status", "pass")
     else:
         checks = [(label, True) for label in ["Patent Leather", "Faux Fur", "Lace / Mesh", "Crimson Hardware", "Platform Boots", "Layered Garments"]]
-        model_rows = "<li><span>active stack</span><strong>FLUX.2 / OFFELLIA / LocateAnything</strong></li>"
+        model_rows = "<li><span>active stack</span><strong>FLUX.2 4B / MiniCPM / LocateAnything</strong></li>"
         score = 86
         scan_status = (scan or {}).get("status", "pass")
     checks_html = "".join(f'<li><span>{"✓" if ok else "!"}</span>{escape(label)}</li>' for label, ok in checks)
     relay = _render_relay_panel(relay_status)
     scan = scan or {"status": scan_status, "findings": [], "purification_actions": [], "export_gate": "pending"}
-    findings = scan.get("findings") or []
-    actions = scan.get("purification_actions") or ["metadata strip ready", "IEND truncation ready", "LSB review ready"]
-    finding_rows = "".join(f"<li>{escape(str(item))}</li>" for item in findings[:4]) or "<li>No upload selected. Scanner ready.</li>"
-    action_rows = "".join(f"<li>{escape(str(item))}</li>" for item in actions[:4])
+    operator_state = operator_state or {}
+    minicpm = operator_state.get("minicpm_judge") or {}
+    nemotron = operator_state.get("nemotron_evidence") or {}
+    sponsor_rows = "".join(
+        f"<li><span>{escape(label)}</span><strong>{escape(str(result.get('status', 'pending')).upper())}</strong><em>{escape(str(result.get('repo_id', repo)))}</em></li>"
+        for label, repo, result in [
+            ("OpenBMB MiniCPM", "openbmb/MiniCPM-V-4.6", minicpm),
+            ("NVIDIA Nemotron", "nvidia/NVIDIA-Nemotron-Parse-v1.2", nemotron),
+        ]
+    )
+    findings = [_redact_scan_text(item) for item in (scan.get("findings") or [])]
+    actions = [_redact_scan_text(item) for item in (scan.get("purification_actions") or ["metadata strip ready", "IEND truncation ready", "LSB review ready"])]
+    finding_rows = "".join(f"<li>{escape(item)}</li>" for item in findings[:4]) or "<li>No upload selected. Scanner ready.</li>"
+    action_rows = "".join(f"<li>{escape(item)}</li>" for item in actions[:4])
     export_gate = str(scan.get("export_gate", "pending")).upper()
     return f"""
     <aside class="nw-panel nw-inspector">
@@ -703,6 +708,8 @@ def render_inspector(run: GenerationRun | None = None, scan: dict | None = None,
       <ul class="nw-checks">{checks_html}</ul>
       <h3>Model Stack</h3>
       <ul class="nw-models">{model_rows}</ul>
+      <h3>Sponsor Evidence</h3>
+      <ul class="nw-relay">{sponsor_rows}</ul>
       <h3>ST3GG Scan</h3>
       <div class="nw-scan">
         <div>{badge(str(scan_status).upper(), _scan_status_tone(str(scan_status)))}<span>Always-on defensive review</span></div>
@@ -823,7 +830,6 @@ def render_dashboard(
     Returns:
         str: The full HTML dashboard markup.
     """
-    regions = render_dashboard_regions(run, adult_mode, scan, relay_status, active_section)
     regions = render_dashboard_regions(run, adult_mode, scan, relay_status, active_section, operator_state)
     return f"""
     <div class="nw-app">
@@ -870,14 +876,12 @@ def render_dashboard_regions(
         dict[str, str]: HTML markup strings keyed by region name (topbar, rail, command_rail, workflow, operations, inspector, drawer, status, artifacts, providers).
     """
     return {
-        "topbar": render_topbar(adult_mode, relay_status),
+        "topbar": render_topbar(adult_mode, relay_status, scan, operator_state),
         "rail": render_left_rail(active_section),
         "command_rail": render_command_rail(active_section),
         "workflow": render_workflow(run, operator_state),
         "operations": render_operations_panel(active_section, run, scan, relay_status, adult_mode=adult_mode, operator_state=operator_state),
-        "workflow": render_workflow(run),
-        "operations": render_operations_panel(active_section, run, scan, relay_status, adult_mode=adult_mode),
-        "inspector": render_inspector(run, scan, relay_status),
+        "inspector": render_inspector(run, scan, relay_status, operator_state),
         "drawer": render_drawer(run),
         "status": render_status_bar(operator_state),
         "artifacts": render_artifact_lane(run, scan, operator_state),

@@ -11,9 +11,19 @@ def test_pinned_lanes_do_not_rotate() -> None:
     assert decision.pinned is True
     assert decision.rotatable is False
     assert decision.primary is not None
-    assert decision.primary.repo_id == "black-forest-labs/FLUX.2-klein-9B"
+    assert decision.primary.repo_id == "black-forest-labs/FLUX.2-klein-4B"
+    assert decision.primary.params_b == 4.0
     assert decision.fallbacks == []
     assert "rotation disabled" in decision.reason
+
+
+def test_private_image_research_keeps_flux_9b_available() -> None:
+    relay = WeaverModelRelay()
+    decision = relay.select_lane("private_image_research", budget=9.0, public_demo=False, strategy="private_research")
+
+    assert decision.primary is not None
+    assert decision.primary.repo_id == "black-forest-labs/FLUX.2-klein-9B"
+    assert decision.primary.pinned is False
 
 
 def test_public_private_taste_judge_respects_license_and_budget() -> None:
@@ -65,8 +75,8 @@ def test_metadata_dedup_prevents_repeated_hf_lookup() -> None:
         calls["count"] += 1
         return {"calls": calls["count"]}
 
-    first = relay.metadata_lookup("hf:black-forest-labs/FLUX.2-klein-9B", resolver)
-    second = relay.metadata_lookup("hf:black-forest-labs/FLUX.2-klein-9B", resolver)
+    first = relay.metadata_lookup("hf:black-forest-labs/FLUX.2-klein-4B", resolver)
+    second = relay.metadata_lookup("hf:black-forest-labs/FLUX.2-klein-4B", resolver)
 
     assert first == second == {"calls": 1}
     assert calls["count"] == 1
@@ -113,7 +123,7 @@ def test_dashboard_surfaces_gmr_pinned_models_and_fallbacks() -> None:
     html = render_dashboard(relay_status=relay.dashboard_snapshot(public_demo=True))
 
     assert "GMR ModelRelay" in html
-    assert "FLUX.2 pinned" in html
+    assert "FLUX.2 4B pinned" in html
     assert "LocateAnything pinned" in html
     assert "fallback:" in html
     assert "Rotation Safe" in html
@@ -130,67 +140,77 @@ def test_optional_external_gateways_are_registered_but_excluded_by_default() -> 
     assert relay.records["fal-media-adapter"].health == "excluded"
 
 
-def test_new_optional_gateway_records_have_correct_lanes() -> None:
+def test_minicpm_v46_is_registered_in_taste_judge_lane() -> None:
     relay = WeaverModelRelay()
 
-    assert relay.records["netlify-ai-gateway-helper"].lane == "prompt_router"
-    assert relay.records["cloudflare-agent-helper"].lane == "prompt_router"
-    assert relay.records["fal-media-adapter"].lane == "video_repair"
+    record = relay.records["minicpm-v46-visual-judge"]
+
+    assert record.lane == "taste_judge"
+    assert record.repo_id == "openbmb/MiniCPM-V-4.6"
+    assert record.provider == "openbmb"
+    assert record.params_b == 1.30
+    assert record.license_gate == "apache-2.0"
+    assert record.health == "healthy"
 
 
-def test_new_optional_gateway_records_have_zero_quota_limits() -> None:
-    """Excluded optional gateways should have zero RPM and RPD limits."""
+def test_nemotron_parse_is_registered_in_taste_judge_lane() -> None:
     relay = WeaverModelRelay()
 
-    for model_id in ("netlify-ai-gateway-helper", "cloudflare-agent-helper", "fal-media-adapter"):
-        record = relay.records[model_id]
-        assert record.rpm_limit == 0, f"{model_id} rpm_limit should be 0"
-        assert record.rpd_limit == 0, f"{model_id} rpd_limit should be 0"
+    record = relay.records["nemotron-parse-v12-evidence"]
+
+    assert record.lane == "taste_judge"
+    assert record.repo_id == "nvidia/NVIDIA-Nemotron-Parse-v1.2"
+    assert record.provider == "hf_nvidia"
+    assert record.params_b == 0.94
+    assert record.health == "healthy"
 
 
-def test_new_optional_gateway_records_have_public_safe_license() -> None:
+def test_nemotron_nano_is_registered_as_fallback_for_parse() -> None:
     relay = WeaverModelRelay()
 
-    assert relay.records["netlify-ai-gateway-helper"].license_gate == "public_safe"
-    assert relay.records["cloudflare-agent-helper"].license_gate == "public_safe"
+    parse_record = relay.records["nemotron-parse-v12-evidence"]
+    nano_record = relay.records["nemotron-nano-4b-gguf-evidence"]
+
+    assert "nemotron-nano-4b-gguf-evidence" in (parse_record.fallback_chain or ())
+    assert nano_record.repo_id == "nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF"
+    assert nano_record.lane == "taste_judge"
+    assert nano_record.params_b == 3.97
 
 
-def test_fal_media_adapter_requires_commercial_license() -> None:
+def test_private_image_research_lane_is_rotatable() -> None:
+    from nexus_visual_weaver.model_relay import PINNED_LANES, ROTATABLE_LANES
+
+    assert "private_image_research" not in PINNED_LANES
+    assert "private_image_research" in ROTATABLE_LANES
+
+
+def test_flux2_klein_4b_is_pinned_with_apache_license() -> None:
     relay = WeaverModelRelay()
 
-    assert relay.records["fal-media-adapter"].license_gate == "commercial_required"
+    record = relay.records["flux2-klein-4b-public"]
+
+    assert record.lane == "image_generation"
+    assert record.pinned is True
+    assert record.params_b == 4.0
+    assert record.license_gate == "apache-2.0"
+    assert record.repo_id == "black-forest-labs/FLUX.2-klein-4B"
 
 
-def test_cloudflare_agent_helper_is_also_excluded() -> None:
+def test_flux2_klein_9b_is_not_pinned_and_in_private_research() -> None:
     relay = WeaverModelRelay()
 
-    assert relay.records["cloudflare-agent-helper"].health == "excluded"
+    record = relay.records["flux2-klein-9b-private"]
+
+    assert record.lane == "private_image_research"
+    assert record.pinned is False
+    assert record.params_b == 9.0
+    assert record.license_gate == "review_required"
 
 
-def test_excluded_gateways_are_skipped_in_lane_selection() -> None:
-    """Excluded health records should not appear as primary in any lane selection."""
-    relay = WeaverModelRelay()
-    excluded_ids = {"netlify-ai-gateway-helper", "cloudflare-agent-helper", "fal-media-adapter"}
-
-    for lane in ("prompt_router", "video_repair"):
-        try:
-            decision = relay.select_lane(lane, public_demo=True, strategy="quality_first")
-            if decision.primary is not None:
-                assert decision.primary.model_id not in excluded_ids, (
-                    f"Excluded gateway {decision.primary.model_id} was selected as primary for lane {lane}"
-                )
-        except Exception:
-            # Lane may have no available records after excluding; that is acceptable
-            pass
-
-
-def test_new_optional_gateways_have_optional_cost_hints() -> None:
+def test_minicpm_has_fallback_chain_configured() -> None:
     relay = WeaverModelRelay()
 
-    netlify = relay.records["netlify-ai-gateway-helper"]
-    cloudflare = relay.records["cloudflare-agent-helper"]
-    fal = relay.records["fal-media-adapter"]
+    record = relay.records["minicpm-v46-visual-judge"]
 
-    assert "optional" in netlify.cost_hint
-    assert "optional" in cloudflare.cost_hint
-    assert "optional" in fal.cost_hint
+    assert record.fallback_chain is not None
+    assert len(record.fallback_chain) > 0

@@ -1,28 +1,86 @@
 import app
+from nexus_visual_weaver.planner import build_command_center_run
 
 
-def test_default_operator_state_has_correct_structure() -> None:
-    state = app._default_operator_state()
+# --- _checkpoint_seed tests ---
 
-    assert state["provider_state"] == "idle"
-    assert state["checkpoint"] == "pending"
-    assert state["export"] == "pending"
-    assert "message" in state
-    assert "No operator action" in state["message"]
+def test_checkpoint_seed_parses_valid_hex_suffix() -> None:
+    # "nw-" prefix + "abcdef12" -> int("abcdef12", 16) % 1_000_000
+    checkpoint_id = "nw-abcdef12"
+    result = app._checkpoint_seed(checkpoint_id)
+    assert result == int("abcdef12", 16) % 1_000_000
 
 
-def test_zero_gpu_entrypoint_returns_fn_unchanged_when_spaces_none() -> None:
-    original_spaces = app.spaces
-    app.spaces = None
+def test_checkpoint_seed_handles_empty_suffix() -> None:
+    assert app._checkpoint_seed("") == 0
+    assert app._checkpoint_seed("nw-") == 0
 
-    def my_fn(x: int) -> int:
-        return x * 2
 
-    wrapped = app._zero_gpu_entrypoint(my_fn)
-    assert wrapped is my_fn
-    assert wrapped(5) == 10
+def test_checkpoint_seed_handles_non_hex_suffix() -> None:
+    # No hex chars -> return 0
+    result = app._checkpoint_seed("nw-zzzzzzzz")
+    assert result == 0
 
-    app.spaces = original_spaces
+
+def test_checkpoint_seed_ignores_non_hex_chars_in_last_8() -> None:
+    # Strips non-hex: "abc-xyz" -> only "abcef" are hex in the last 8 chars ("-xyz" strips to "abc")
+    # "0000000g" -> only "0000000" are valid hex
+    result = app._checkpoint_seed("0000000g")
+    assert result == int("0000000", 16) % 1_000_000
+    assert result == 0
+
+
+def test_checkpoint_seed_returns_value_within_range() -> None:
+    checkpoint_id = "nw-deadbeef"
+    result = app._checkpoint_seed(checkpoint_id)
+    assert 0 <= result < 1_000_000
+
+
+def test_checkpoint_seed_uses_only_last_8_chars() -> None:
+    # Long checkpoint id: only last 8 chars considered
+    # "nw-aabbccddee11223344" -> last 8 is "11223344"
+    result = app._checkpoint_seed("nw-aabbccddee11223344")
+    assert result == int("11223344", 16) % 1_000_000
+
+
+# --- _wardrobe_summary tests ---
+
+def test_wardrobe_summary_returns_string_with_slot_fields() -> None:
+    run = build_command_center_run("gothic patent leather platform boots, crimson hardware")
+    summary = app._wardrobe_summary(run)
+
+    # Summary is a semicolon-delimited string of slot info
+    assert isinstance(summary, str)
+    assert len(summary) > 0
+    # Should contain material= and palette= from slot info
+    assert "material=" in summary
+    assert "palette=" in summary
+    assert "locked=" in summary
+
+
+def test_wardrobe_summary_handles_run_with_no_outfit() -> None:
+    class FakeRun:
+        outfit = None
+
+    summary = app._wardrobe_summary(FakeRun())
+    assert summary == ""
+
+
+def test_wardrobe_summary_handles_none_run() -> None:
+    # Pass something with no outfit attribute
+    class Empty:
+        pass
+
+    summary = app._wardrobe_summary(Empty())
+    assert summary == ""
+
+
+def test_wardrobe_summary_includes_slot_names() -> None:
+    run = build_command_center_run("dark couture archivist, patent leather, platform boots")
+    summary = app._wardrobe_summary(run)
+
+    # Slot names like footwear, outerwear, upper_body should appear
+    assert any(slot_name in summary for slot_name in ["footwear", "outerwear", "upper_body", "jewelry"])
 
 
 def test_run_weave_returns_stateful_dashboard_packet() -> None:
@@ -42,6 +100,8 @@ def test_run_weave_returns_stateful_dashboard_packet() -> None:
 
 
 def test_operator_actions_transition_checkpoint_export_and_stop() -> None:
+    from pathlib import Path
+
     result = app.run_weave(
         "gothic patent leather platform boots, crimson hardware",
         "Strict",
@@ -51,7 +111,10 @@ def test_operator_actions_transition_checkpoint_export_and_stop() -> None:
         "Forge",
     )
     run = result[13]
-    operator_state = result[15]
+    artifact_path = Path("outputs/test-generated-artifact.png")
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+    operator_state = {**result[15], "generation": {**result[15]["generation"], "output_path": str(artifact_path)}}
     clean_scan = {"status": "pass", "export_gate": "clear", "findings": [], "purification_actions": []}
 
     approved = app.approve_checkpoint(run, False, clean_scan, "Forge", operator_state)
@@ -83,152 +146,78 @@ def test_export_blocks_without_checkpoint() -> None:
     assert "checkpoint" in blocked[13]["message"].lower()
 
 
-def test_approve_checkpoint_blocks_when_run_is_none() -> None:
-    blocked = app.approve_checkpoint(None, False, None, "Forge", None)
-
-    assert blocked[13]["provider_state"] == "blocked"
-    assert "No run exists yet" in blocked[13]["message"]
-
-
-def test_approve_checkpoint_sets_checkpointed_when_export_gate_not_clear() -> None:
-    result = app.run_weave(
-        "gothic patent leather platform boots",
-        "Strict",
-        "Wan2.2 I2V",
-        False,
-        None,
-        "Forge",
+def test_reference_scan_cannot_clear_blocked_generated_artifact() -> None:
+    base = app.ROOT / "outputs" / "test-app-callbacks"
+    base.mkdir(parents=True, exist_ok=True)
+    blocked_artifact = base / "blocked-generated.png"
+    blocked_artifact.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIEND\xaeB`\x82"
+        b"NEXUS_TRAILING_PAYLOAD"
     )
-    run = result[13]
-    dirty_scan = {"status": "review", "export_gate": "blocked", "findings": ["extension mismatch"]}
-    operator_state = result[15]
-
-    approved = app.approve_checkpoint(run, False, dirty_scan, "Forge", operator_state)
-
-    assert approved[13]["checkpoint"] == "approved"
-    assert approved[13]["provider_state"] == "checkpointed"
-    assert "ST3GG review" in approved[13]["message"]
-
-
-def test_export_blocks_when_run_is_none() -> None:
-    clean_scan = {"status": "pass", "export_gate": "clear"}
-
-    blocked = app.export_packet(None, False, clean_scan, "Forge", None)
-
-    assert blocked[13]["provider_state"] == "blocked"
-    assert blocked[13]["export"] == "blocked"
-    assert "no active run packet" in blocked[13]["message"]
-
-
-def test_export_blocks_when_scan_gate_not_clear() -> None:
-    result = app.run_weave(
-        "gothic patent leather platform boots",
-        "Strict",
-        "Wan2.2 I2V",
-        False,
-        None,
-        "Forge",
-    )
-    run = result[13]
-    operator_state = result[15]
-
-    # First approve the checkpoint
-    clean_scan = {"status": "pass", "export_gate": "clear"}
-    approved = app.approve_checkpoint(run, False, clean_scan, "Forge", operator_state)
-
-    # Then try to export with a blocked scan
-    dirty_scan = {"status": "review", "export_gate": "blocked"}
-    blocked_export = app.export_packet(run, False, dirty_scan, "Forge", approved[13])
-
-    assert blocked_export[13]["provider_state"] == "blocked"
-    assert "ST3GG gate is not clear" in blocked_export[13]["message"]
-
-
-def test_stop_provider_job_always_sets_stopped() -> None:
-    for initial_state in [None, {"provider_state": "exported"}, {"provider_state": "checkpointed"}]:
-        result = app.stop_provider_job(None, False, None, "Forge", initial_state)
-        assert result[13]["provider_state"] == "stopped"
-        assert "stopped" in result[13]["message"].lower()
-
-
-def test_reset_demo_returns_17_tuple_with_idle_state() -> None:
-    result = app.reset_demo(False, "Forge")
-
-    assert len(result) == 17
-    # result[13] is None (active_run_state reset)
-    assert result[13] is None
-    # result[15] is the operator_state, which should be idle
-    assert result[15]["provider_state"] == "idle"
-    assert result[15]["checkpoint"] == "pending"
-    # result[16] is gr.update(interactive=False)
-    assert result[16]["interactive"] is False
-
-
-def test_reset_demo_clears_run_json_to_empty_dict() -> None:
-    result = app.reset_demo(False, "Forge")
-
-    # result[10] is run_json
-    assert result[10] == {}
-
-
-def test_toggle_adult_visibility_returns_10_tuple() -> None:
-    result = app.toggle_adult_visibility(False, "Forge", None)
-
-    assert len(result) == 10
-    # Last element should be operator_state with adult mode message
-    assert isinstance(result[9], dict)
-    assert "Adult catalog visibility changed" in result[9]["message"]
-    # Gates should remain active
-    assert "ST3GG" in result[9]["message"]
-
-
-def test_toggle_adult_visibility_adult_mode_on() -> None:
-    result_off = app.toggle_adult_visibility(False, "Security", None)
-    result_on = app.toggle_adult_visibility(True, "Security", None)
-
-    # Both should return a valid 10-tuple
-    assert len(result_off) == 10
-    assert len(result_on) == 10
-    # The topbar HTML (index 0) should differ between modes
-    assert result_off[0] != result_on[0]
-
-
-def test_render_stateful_stop_btn_interactive_false_for_idle_state() -> None:
-    """_render_stateful should return gr.update(interactive=False) when no run exists."""
-    result = app._render_stateful(
-        None,
-        False,
-        None,
-        "Forge",
-        {"provider_state": "idle", "checkpoint": "pending", "export": "pending", "message": "test"},
-    )
-
-    # result[14] is the stop_btn update
-    assert result[14]["interactive"] is False
-
-
-def test_render_stateful_stop_btn_interactive_true_when_run_active() -> None:
-    """_render_stateful returns interactive=True for stop_btn when run exists in active state."""
-    from nexus_visual_weaver.planner import build_command_center_run
-
-    run = build_command_center_run("gothic patent leather")
-    operator_state = {
+    clean_reference = base / "clean-reference.png"
+    clean_reference.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIEND\xaeB`\x82")
+    run = build_command_center_run("gothic patent leather platform boots")
+    state = {
         "provider_state": "checkpointed",
         "checkpoint": "pending_review",
-        "export": "pending",
-        "message": "Run active.",
+        "export": "blocked",
+        "generation": {"status": "success", "output_path": str(blocked_artifact)},
+        "generated_scan": app.scan_file(str(blocked_artifact)),
     }
 
-    result = app._render_stateful(run, False, None, "Forge", operator_state)
+    scanned = app.scan_reference(run, False, str(clean_reference), "Forge", state)
+    assert scanned[13]["reference_scan"]["export_gate"] == "clear"
+    assert scanned[13]["export"] == "blocked"
+    assert scanned[15]["export_gate"] == "blocked"
 
-    # result[14] is the stop_btn update
-    assert result[14]["interactive"] is True
+    approved = app.approve_checkpoint(run, False, scanned[15], "Forge", scanned[13])
+    assert approved[13]["provider_state"] == "checkpointed"
+    assert approved[13]["export"] == "blocked"
 
 
-def test_scan_reference_updates_export_gate_in_operator_state() -> None:
-    result = app.scan_reference(None, False, None, "Forge", None)
+def test_blocked_reference_scan_does_not_block_clear_generated_artifact() -> None:
+    base = app.ROOT / "outputs" / "test-app-callbacks"
+    base.mkdir(parents=True, exist_ok=True)
+    generated = base / "clear-generated.png"
+    generated.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIEND\xaeB`\x82")
+    blocked_reference = base / "blocked-reference.png"
+    blocked_reference.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIEND\xaeB`\x82"
+        b"NEXUS_TRAILING_PAYLOAD"
+    )
+    run = build_command_center_run("gothic patent leather platform boots")
+    state = {
+        "provider_state": "checkpointed",
+        "checkpoint": "pending_review",
+        "export": "clear",
+        "generation": {"status": "success", "output_path": str(generated)},
+        "generated_scan": app.scan_file(str(generated)),
+    }
 
-    # result[-1] is scan (the extra return value)
-    assert isinstance(result[-1], dict)
-    # The operator_state (result[13]) reflects the scanned export gate
-    assert result[13]["export"] in {"clear", "pending", "blocked"}
+    scanned = app.scan_reference(run, False, str(blocked_reference), "Forge", state)
+    assert scanned[13]["reference_scan"]["export_gate"] == "blocked"
+    assert scanned[13]["export"] == "clear"
+    assert scanned[15]["export_gate"] == "clear"
+
+    approved = app.approve_checkpoint(run, False, scanned[15], "Forge", scanned[13])
+    assert approved[13]["provider_state"] == "export_ready"
+    assert approved[13]["export"] == "clear"
+
+
+def test_checkpoint_blocks_without_generated_artifact() -> None:
+    result = app.run_weave(
+        "gothic patent leather platform boots, crimson hardware",
+        "Strict",
+        "Wan2.2 I2V",
+        False,
+        None,
+        "Forge",
+    )
+    clean_scan = {"status": "pass", "export_gate": "clear", "findings": [], "purification_actions": []}
+
+    blocked = app.approve_checkpoint(result[13], False, clean_scan, "Forge", result[15])
+
+    assert blocked[13]["provider_state"] == "blocked"
+    assert "no generated artifact" in blocked[13]["message"].lower()

@@ -32,9 +32,12 @@ jobs:
         run: python -m compileall app.py src tests
 
       - name: Import app
+        env:
+          NEXUS_DISABLE_REAL_HF: "1"
         run: python -c "import app; print('app import ok')"
 
       - name: Test
         env:
+          NEXUS_DISABLE_REAL_HF: "1"
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
         run: python -m pytest -q tests -p no:cacheprovider

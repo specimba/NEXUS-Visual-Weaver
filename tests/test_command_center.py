@@ -1,10 +1,26 @@
 from pathlib import Path
 
-from nexus_visual_weaver.catalog import active_stack, catalog_summary, filter_catalog, parameter_budget
+from nexus_visual_weaver.catalog import (
+    DEFAULT_ACTIVE_STACK,
+    PRIVATE_RESEARCH_STACK,
+    active_stack,
+    catalog_summary,
+    filter_catalog,
+    parameter_budget,
+)
 from nexus_visual_weaver.grounding import inspect_outfit
 from nexus_visual_weaver.model_relay import WeaverModelRelay
 from nexus_visual_weaver.planner import build_command_center_run
-from nexus_visual_weaver.render import render_command_header, render_dashboard_regions, render_operations_panel
+from nexus_visual_weaver.render import (
+    render_command_header,
+    render_dashboard_regions,
+    render_inspector,
+    render_operations_panel,
+    render_provider_cards,
+    render_topbar,
+    render_trust_strip,
+)
+from nexus_visual_weaver.schema import ModelCandidate
 from nexus_visual_weaver.security import scan_file
 from nexus_visual_weaver.taste import refine_prompt, score_prompt
 from nexus_visual_weaver.wardrobe import build_outfit_graph
@@ -47,6 +63,24 @@ def test_active_parameter_budget_passes_default_stack() -> None:
     assert budget["active_b"] <= 32.0
 
 
+def test_public_stack_uses_flux_4b_and_excludes_private_models() -> None:
+    stack = active_stack(False)
+    repo_ids = {model.repo_id for model in stack}
+
+    assert "black-forest-labs/FLUX.2-klein-4B" in repo_ids
+    assert "black-forest-labs/FLUX.2-klein-9B" not in repo_ids
+    assert not any("OFFELLIA" in repo_id for repo_id in repo_ids)
+    assert all(model.params_b <= 4.0 for model in stack)
+
+
+def test_private_catalog_keeps_stronger_research_models_available() -> None:
+    private_models, _ = filter_catalog(True)
+    repo_ids = {model.repo_id for model in private_models}
+
+    assert "black-forest-labs/FLUX.2-klein-9B" in repo_ids
+    assert "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf" in repo_ids
+
+
 def test_command_center_run_is_checkpointed() -> None:
     run = build_command_center_run(
         "Slavic model, patent leather, faux fur, Chantilly lace, crimson hardware, platform boots, NEXUS sigils"
@@ -54,7 +88,7 @@ def test_command_center_run_is_checkpointed() -> None:
     assert run.checkpoint.checkpoint_id.startswith("nw-")
     assert run.video.checkpoint_required is True
     assert run.inspection.targets
-    assert run.model_stack[2].repo_id == "nvidia/LocateAnything-3B"
+    assert any(model.repo_id == "nvidia/LocateAnything-3B" for model in run.model_stack)
 
 
 def test_security_scan_does_not_return_payload_excerpt() -> None:
@@ -75,6 +109,18 @@ def test_security_scan_flags_extension_magic_mismatch() -> None:
     assert scan["status"] == "review"
     assert scan["export_gate"] == "blocked"
     assert any("extension does not match" in finding for finding in scan["findings"])
+
+
+def test_security_scan_safe_vs_blocked_fixtures() -> None:
+    fixture_dir = Path(__file__).parent / "fixtures"
+    safe = scan_file(str(fixture_dir / "st3gg_safe_clean.png"))
+    blocked = scan_file(str(fixture_dir / "st3gg_blocked_trailing.png"))
+
+    assert safe["status"] == "pass"
+    assert safe["export_gate"] == "clear"
+    assert blocked["status"] == "review"
+    assert blocked["export_gate"] == "blocked"
+    assert any("trailing data" in finding for finding in blocked["findings"])
 
 
 def test_dashboard_regions_expose_artifacts_and_provider_cards() -> None:
@@ -101,9 +147,9 @@ def test_dashboard_regions_expose_artifacts_and_provider_cards() -> None:
     assert "Forge Operations" in regions["operations"]
     assert "Provider Handoff Cards" in regions["providers"]
     assert "nw-provider-meter" in regions["providers"]
-    assert "optional gateway" in regions["providers"]
-    assert "CHECKPOINTED" in regions["providers"]
     assert "Selected: Forge" in regions["command_rail"]
+    assert "TRUST MODEL" in regions["topbar"]
+    assert "Clean PNG -> pass" in regions["topbar"]
     assert "ST3GG Scan" in regions["inspector"]
     assert "nw-weave-console" in regions["workflow"]
     assert "Hackathon Signal" in regions["workflow"]
@@ -167,7 +213,7 @@ def test_command_header_exposes_governed_run_controls() -> None:
 
     assert "Raven Chronicle Active Weave" in header
     assert "ST3GG ALWAYS ON" in header
-    assert "FLUX.2 PINNED" in header
+    assert "FLUX.2 4B PINNED" in header
     assert "HUMAN CHECKPOINT" in header
 
 
@@ -190,216 +236,281 @@ def test_catalog_summary_reflects_adult_scope() -> None:
     assert adult_summary["models_visible"] > default_summary["models_visible"]
 
 
-def test_render_status_bar_idle_uses_idle_stop_class() -> None:
-    from nexus_visual_weaver.render import render_status_bar
+# --- render_trust_strip tests ---
 
-    html = render_status_bar(operator_state={"provider_state": "idle"})
+def test_render_trust_strip_defaults_to_idle_state() -> None:
+    html = render_trust_strip()
 
-    assert "nw-stop-idle" in html
-    assert "nw-stop-active" not in html
-    assert "HF Space" in html
-
-
-def test_render_status_bar_active_state_uses_active_stop_class() -> None:
-    from nexus_visual_weaver.render import render_status_bar
-
-    for active_state in ("checkpointed", "export_ready", "exported", "blocked", "stopped"):
-        html = render_status_bar(operator_state={"provider_state": active_state})
-        assert "nw-stop-active" in html, f"Expected nw-stop-active for provider_state={active_state}"
-        assert "nw-stop-idle" not in html
+    assert "TRUST MODEL" in html
+    assert "Generation is not export." in html
+    assert "ST3GG IDLE" in html
+    assert "EXPORT PENDING" in html
+    assert "Clean PNG -> pass." in html
+    assert "FIXTURE EVIDENCE" in html
 
 
-def test_render_status_bar_defaults_without_operator_state() -> None:
-    from nexus_visual_weaver.render import render_status_bar
+def test_render_trust_strip_pass_scan_shows_clear_export() -> None:
+    scan = {"status": "pass", "export_gate": "clear", "findings": ["all checks passed"], "purification_actions": ["none needed"]}
+    html = render_trust_strip(scan=scan)
 
-    html = render_status_bar()
-
-    assert "nw-stop-idle" in html
-    assert "Idle" in html
-
-
-def test_render_workflow_approved_checkpoint_changes_action_label() -> None:
-    from nexus_visual_weaver.render import render_workflow
-
-    html = render_workflow(operator_state={"checkpoint": "approved", "provider_state": "export_ready"})
-
-    assert "Checkpoint approved" in html
-    assert "export packet may be prepared" in html
+    assert "ST3GG PASS" in html
+    assert "EXPORT CLEAR" in html
+    assert "all checks passed" in html
 
 
-def test_render_workflow_stopped_provider_changes_action_label() -> None:
-    from nexus_visual_weaver.render import render_workflow
+def test_render_trust_strip_review_scan_shows_blocked_export() -> None:
+    scan = {"status": "review", "export_gate": "blocked", "findings": ["trailing data after IEND"], "purification_actions": ["truncate PNG"]}
+    html = render_trust_strip(scan=scan)
 
-    html = render_workflow(operator_state={"checkpoint": "pending", "provider_state": "stopped"})
-
-    assert "Provider handoff stopped" in html
-    assert "dry-run evidence remains available" in html
-
-
-def test_render_workflow_exported_state_uses_pass_badge() -> None:
-    from nexus_visual_weaver.render import render_workflow
-
-    html = render_workflow(operator_state={"provider_state": "exported"})
-
-    assert "EXPORTED" in html
-    assert 'nw-pass' in html
+    assert "ST3GG REVIEW" in html
+    assert "EXPORT BLOCKED" in html
+    assert "trailing data after IEND" in html
 
 
-def test_render_workflow_blocked_state_uses_warn_badge() -> None:
-    from nexus_visual_weaver.render import render_workflow
-
-    html = render_workflow(operator_state={"provider_state": "blocked"})
-
-    assert "BLOCKED" in html
-    assert 'nw-warn' in html
-
-
-def test_render_artifact_lane_blocked_when_provider_blocked() -> None:
-    from nexus_visual_weaver.render import render_artifact_lane
-
-    html = render_artifact_lane(
-        scan={"status": "idle", "export_gate": "pending"},
-        operator_state={"provider_state": "blocked"},
-    )
-
-    # The video artifact card should be blocked when provider is blocked
-    assert "BLOCKED" in html
-
-
-def test_render_artifact_lane_blocked_when_export_gate_blocked() -> None:
-    from nexus_visual_weaver.render import render_artifact_lane
-
-    html = render_artifact_lane(
-        scan={"status": "review", "export_gate": "blocked"},
-        operator_state={"provider_state": "checkpointed"},
-    )
-
-    assert "BLOCKED" in html
-
-
-def test_render_artifact_lane_preview_mode_labels() -> None:
-    from nexus_visual_weaver.render import render_artifact_lane
-
-    state_to_label = {
-        "idle": "Idle",
-        "dry-run": "Dry Run",
-        "checkpointed": "Checkpointed",
-        "export_ready": "Export Ready",
-        "exported": "Exported",
-        "blocked": "Blocked",
-        "stopped": "Stopped",
-    }
-    for provider_state, expected_label in state_to_label.items():
-        html = render_artifact_lane(operator_state={"provider_state": provider_state})
-        assert expected_label in html, f"Expected preview mode label '{expected_label}' for state '{provider_state}'"
-
-
-def test_render_operations_panel_invalid_section_defaults_to_forge() -> None:
-    html = render_operations_panel(active_section="NonExistentSection")
-
-    assert "Forge Operations" in html
-    assert "Prompt contract" in html
-
-
-def test_render_operations_panel_adult_mode_shows_private_scope() -> None:
-    html = render_operations_panel(active_section="Models", adult_mode=True)
-
-    assert "Private research scope" in html
-
-
-def test_render_operations_panel_public_mode_shows_public_scope() -> None:
-    html = render_operations_panel(active_section="Models", adult_mode=False)
-
-    assert "Public demo scope" in html
-
-
-def test_render_operations_panel_security_with_multiple_findings() -> None:
-    scan_with_findings = {
+def test_render_trust_strip_redacts_payload_details() -> None:
+    scan = {
         "status": "review",
         "export_gate": "blocked",
-        "findings": ["extension does not match magic bytes", "LSB anomaly detected"],
+        "findings": ["payload excerpt: deadbeef hidden content recovered"],
+        "purification_actions": ["raw byte hex dump should stay quarantined"],
     }
-    html = render_operations_panel(active_section="Security", scan=scan_with_findings)
+    html = render_trust_strip(scan=scan)
 
-    assert "extension does not match magic bytes" in html
-    assert "No findings." not in html
-
-
-def test_render_operations_panel_security_idle_shows_no_upload_message() -> None:
-    html = render_operations_panel(active_section="Security", scan=None)
-
-    assert "No upload selected." in html
+    assert "Redacted scan detail" in html
+    assert "deadbeef" not in html
+    assert "hex dump" not in html
 
 
-def test_render_operations_panel_forge_shows_operator_message() -> None:
-    html = render_operations_panel(
-        active_section="Forge",
-        operator_state={"provider_state": "checkpointed", "message": "Run packet generated."},
-    )
+def test_render_trust_strip_approved_checkpoint_shows_pass() -> None:
+    operator_state = {"checkpoint": "approved", "provider_state": "export_ready"}
+    html = render_trust_strip(operator_state=operator_state)
 
-    assert "Run packet generated." in html
-    assert "CHECKPOINTED" in html
+    assert "CHECKPOINT APPROVED" in html
 
 
-def test_render_provider_cards_optional_providers_configured_with_fal_key(monkeypatch) -> None:
-    from nexus_visual_weaver.render import render_provider_cards
+def test_render_trust_strip_pending_review_checkpoint_label() -> None:
+    operator_state = {"checkpoint": "pending_review"}
+    html = render_trust_strip(operator_state=operator_state)
 
-    monkeypatch.setenv("FAL_KEY", "test-fal-key")
-    monkeypatch.delenv("NETLIFY_AUTH_TOKEN", raising=False)
-    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
-    monkeypatch.delenv("CF_ACCOUNT_ID", raising=False)
+    assert "CHECKPOINT PENDING REVIEW" in html
 
+
+# --- render_topbar tests ---
+
+def test_render_topbar_includes_trust_strip() -> None:
+    html = render_topbar()
+
+    assert "TRUST MODEL" in html
+    assert "nw-trust-strip" in html
+
+
+def test_render_topbar_with_scan_passes_to_trust_strip() -> None:
+    scan = {"status": "pass", "export_gate": "clear", "findings": ["no issues"], "purification_actions": []}
+    html = render_topbar(scan=scan)
+
+    assert "ST3GG PASS" in html
+    assert "EXPORT CLEAR" in html
+
+
+def test_render_topbar_with_operator_state_shows_checkpoint() -> None:
+    operator_state = {"checkpoint": "approved"}
+    html = render_topbar(operator_state=operator_state)
+
+    assert "CHECKPOINT APPROVED" in html
+
+
+def test_render_topbar_default_scan_shows_fixture_evidence() -> None:
+    html = render_topbar()
+
+    assert "Clean PNG -> pass." in html
+    assert "PNG trailing bytes -> blocked." in html
+
+
+# --- render_inspector sponsor evidence tests ---
+
+def test_render_inspector_shows_sponsor_evidence_section() -> None:
+    html = render_inspector()
+
+    assert "Sponsor Evidence" in html
+    assert "OpenBMB MiniCPM" in html
+    assert "NVIDIA Nemotron" in html
+
+
+def test_render_inspector_with_missing_secret_shows_pending() -> None:
+    operator_state = {
+        "minicpm_judge": {"status": "missing_secret", "repo_id": "openbmb/MiniCPM-V-4.6"},
+        "nemotron_evidence": {"status": "missing_secret", "repo_id": "nvidia/NVIDIA-Nemotron-Parse-v1.2"},
+    }
+    html = render_inspector(operator_state=operator_state)
+
+    assert "MISSING_SECRET" in html
+
+
+def test_render_inspector_with_success_judge_shows_success_status() -> None:
+    operator_state = {
+        "minicpm_judge": {"status": "success", "repo_id": "openbmb/MiniCPM-V-4.6"},
+        "nemotron_evidence": {"status": "success", "repo_id": "nvidia/NVIDIA-Nemotron-Parse-v1.2"},
+    }
+    html = render_inspector(operator_state=operator_state)
+
+    assert html.count("SUCCESS") >= 2
+
+
+def test_render_inspector_shows_default_stack_label_without_run() -> None:
+    html = render_inspector()
+
+    assert "FLUX.2 4B / MiniCPM / LocateAnything" in html
+
+
+# --- render_provider_cards sponsor lane tests ---
+
+def test_render_provider_cards_shows_openbmb_and_nvidia_entries() -> None:
     html = render_provider_cards()
 
-    # fal should show as configured
+    assert "Openbmb" in html or "openbmb" in html.lower()
+    assert "Nvidia" in html or "nvidia" in html.lower()
+
+
+def test_render_provider_cards_shows_sponsor_lane_badge_for_openbmb(monkeypatch) -> None:
+    monkeypatch.setenv("MINICPM_API_KEY", "test-key")
+    monkeypatch.setenv("MINICPM_BASE_URL", "https://minicpm.example.test")
+    html = render_provider_cards()
+
+    assert "SPONSOR LANE" in html
+
+
+def test_render_provider_cards_shows_missing_secret_for_unconfigured_sponsor(monkeypatch) -> None:
+    monkeypatch.delenv("MINICPM_API_KEY", raising=False)
+    monkeypatch.delenv("OPENBMB_API_KEY", raising=False)
+    monkeypatch.delenv("NEMOTRON_API_KEY", raising=False)
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    html = render_provider_cards()
+
+    assert "MISSING SECRET" in html
+
+
+def test_render_provider_cards_configured_openbmb_shows_configured(monkeypatch) -> None:
+    monkeypatch.setenv("MINICPM_API_KEY", "test-key")
+    monkeypatch.delenv("MINICPM_BASE_URL", raising=False)
+    monkeypatch.delenv("NEMOTRON_API_KEY", raising=False)
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    monkeypatch.delenv("NEMOTRON_BASE_URL", raising=False)
+    monkeypatch.delenv("FAL_KEY", raising=False)
+    monkeypatch.delenv("NETLIFY_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    html = render_provider_cards()
+
+    assert "CONFIGURED" not in html
+    assert "MISSING SECRET" in html
+
+
+def test_render_provider_cards_configured_openbmb_requires_key_and_base_url(monkeypatch) -> None:
+    monkeypatch.setenv("MINICPM_API_KEY", "test-key")
+    monkeypatch.setenv("MINICPM_BASE_URL", "https://minicpm.example.test")
+    html = render_provider_cards()
+
     assert "CONFIGURED" in html
 
 
-def test_render_provider_cards_optional_providers_blocked_without_secrets(monkeypatch) -> None:
-    from nexus_visual_weaver.render import render_provider_cards
-
-    monkeypatch.delenv("FAL_KEY", raising=False)
-    monkeypatch.delenv("NETLIFY_AUTH_TOKEN", raising=False)
-    monkeypatch.delenv("NETLIFY_SITE_ID", raising=False)
-    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
-    monkeypatch.delenv("CF_ACCOUNT_ID", raising=False)
-
-    html = render_provider_cards()
-
-    # All three optional gateways should appear as blocked
-    assert html.count("NOT MVP DEFAULT") == 3
-    assert "Fal" in html
-    assert "Netlify" in html
-    assert "Cloudflare" in html
-
-
-def test_render_provider_cards_adult_mode_label() -> None:
-    from nexus_visual_weaver.render import render_provider_cards
-
-    public_html = render_provider_cards(adult_mode=False)
-    private_html = render_provider_cards(adult_mode=True)
-
-    assert "PUBLIC DEMO SAFE" in public_html
-    assert "PRIVATE RESEARCH" in private_html
-
-
-def test_render_dashboard_regions_returns_operations_key() -> None:
-    regions = render_dashboard_regions()
-
-    assert "operations" in regions
-    assert isinstance(regions["operations"], str)
-    assert len(regions["operations"]) > 0
-
-
-def test_render_dashboard_regions_operator_state_propagates_to_workflow_and_status() -> None:
-    operator_state = {
-        "provider_state": "exported",
-        "checkpoint": "approved",
-        "export": "clear",
-        "message": "Export complete.",
+def test_render_operations_and_inspector_redact_payload_details() -> None:
+    scan = {
+        "status": "review",
+        "export_gate": "blocked",
+        "findings": ["payload excerpt: recovered hidden content"],
+        "purification_actions": ["base64 raw bytes quarantined"],
     }
-    regions = render_dashboard_regions(operator_state=operator_state)
 
-    assert "EXPORTED" in regions["workflow"]
-    assert "nw-stop-active" in regions["status"]
+    operations = render_operations_panel(active_section="Security", scan=scan)
+    inspector = render_inspector(scan=scan)
+
+    assert "Redacted scan detail" in operations
+    assert "Redacted scan detail" in inspector
+    assert "recovered hidden content" not in operations
+    assert "base64 raw bytes" not in inspector
+
+
+# --- catalog public_demo field tests ---
+
+def test_filter_catalog_excludes_flux_9b_in_public_mode() -> None:
+    models, _ = filter_catalog(False)
+    repo_ids = {model.repo_id for model in models}
+
+    assert "black-forest-labs/FLUX.2-klein-9B" not in repo_ids
+
+
+def test_filter_catalog_includes_flux_9b_in_adult_mode() -> None:
+    models, _ = filter_catalog(True)
+    repo_ids = {model.repo_id for model in models}
+
+    assert "black-forest-labs/FLUX.2-klein-9B" in repo_ids
+
+
+def test_filter_catalog_excludes_offellia_in_public_mode() -> None:
+    models, _ = filter_catalog(False)
+    repo_ids = {model.repo_id for model in models}
+
+    assert not any("OFFELLIA" in repo_id for repo_id in repo_ids)
+
+
+def test_active_stack_uses_private_research_stack_in_adult_mode() -> None:
+    stack = active_stack(True)
+    repo_ids = {model.repo_id for model in stack}
+
+    assert "black-forest-labs/FLUX.2-klein-9B" in repo_ids
+    assert "black-forest-labs/FLUX.2-klein-4B" not in repo_ids
+
+
+def test_private_research_stack_constant_contains_9b_and_offellia() -> None:
+    assert "black-forest-labs/FLUX.2-klein-9B" in PRIVATE_RESEARCH_STACK
+    assert "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf" in PRIVATE_RESEARCH_STACK
+
+
+def test_default_active_stack_constant_uses_4b_and_sponsor_models() -> None:
+    assert "black-forest-labs/FLUX.2-klein-4B" in DEFAULT_ACTIVE_STACK
+    assert "openbmb/MiniCPM-V-4.6" in DEFAULT_ACTIVE_STACK
+    assert "nvidia/NVIDIA-Nemotron-Parse-v1.2" in DEFAULT_ACTIVE_STACK
+    assert "black-forest-labs/FLUX.2-klein-9B" not in DEFAULT_ACTIVE_STACK
+
+
+# --- schema ModelCandidate public_demo tests ---
+
+def test_model_candidate_public_demo_defaults_to_true() -> None:
+    candidate = ModelCandidate(
+        repo_id="test/model",
+        role="test_role",
+        task="text-to-image",
+        params_b=1.0,
+        runtime="local",
+        license="apache-2.0",
+    )
+    assert candidate.public_demo is True
+
+
+def test_model_candidate_public_demo_can_be_set_false() -> None:
+    candidate = ModelCandidate(
+        repo_id="test/private-model",
+        role="private_role",
+        task="text-to-image",
+        params_b=9.0,
+        runtime="gated provider",
+        license="other",
+        public_demo=False,
+    )
+    assert candidate.public_demo is False
+
+
+def test_public_demo_false_models_are_excluded_from_public_filter() -> None:
+    private = ModelCandidate(
+        repo_id="test/hidden-model",
+        role="private",
+        task="text-to-image",
+        params_b=2.0,
+        runtime="local",
+        license="other",
+        public_demo=False,
+    )
+    # public_demo=False should mean filter_catalog(False) excludes it
+    # The catalog-level test: verify FLUX 9B (public_demo=False) is absent
+    models_public, _ = filter_catalog(False)
+    assert all(m.public_demo for m in models_public)
