@@ -23,6 +23,7 @@ class HFGenerationResult:
     width: int = 1024
     height: int = 1024
     steps: int = 4
+    hf_token_present: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -49,6 +50,10 @@ def _short_error(exc: BaseException) -> str:
     return f"{exc.__class__.__name__}: {text}"
 
 
+def _hf_token() -> str | None:
+    return os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+
+
 def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height: int = 1024, steps: int = 4) -> HFGenerationResult:
     if not hf_runtime_enabled():
         return HFGenerationResult(
@@ -59,6 +64,7 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
             width=width,
             height=height,
             steps=steps,
+            hf_token_present=bool(_hf_token()),
         )
 
     started = time.perf_counter()
@@ -74,6 +80,7 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
             width=width,
             height=height,
             steps=steps,
+            hf_token_present=bool(_hf_token()),
         )
 
     if not torch.cuda.is_available():
@@ -85,11 +92,13 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
             width=width,
             height=height,
             steps=steps,
+            hf_token_present=bool(_hf_token()),
         )
 
     try:
         dtype = torch.bfloat16
-        pipe = Flux2KleinPipeline.from_pretrained(FLUX_REPO_ID, torch_dtype=dtype)
+        token = _hf_token()
+        pipe = Flux2KleinPipeline.from_pretrained(FLUX_REPO_ID, torch_dtype=dtype, token=token)
         pipe.enable_model_cpu_offload()
         generator = torch.Generator(device="cuda").manual_seed(seed)
         image = pipe(
@@ -112,6 +121,7 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
             width=width,
             height=height,
             steps=steps,
+            hf_token_present=bool(token),
         )
     except Exception as exc:  # pragma: no cover - exercised on HF Space with gated/runtime conditions.
         return HFGenerationResult(
@@ -123,4 +133,5 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
             width=width,
             height=height,
             steps=steps,
+            hf_token_present=bool(_hf_token()),
         )
