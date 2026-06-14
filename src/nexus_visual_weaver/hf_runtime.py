@@ -38,7 +38,17 @@ def hf_runtime_enabled() -> bool:
 
 
 def _output_dir() -> Path:
-    root = Path(os.environ.get("NEXUS_OUTPUT_DIR") or ("/data/nexus_visual_weaver" if Path("/data").exists() else "outputs/runtime"))
+    path_str = os.environ.get("NEXUS_OUTPUT_DIR")
+    if not path_str:
+        if Path("/data").exists():
+            try:
+                root = Path("/data/nexus_visual_weaver")
+                root.mkdir(parents=True, exist_ok=True)
+                return root
+            except PermissionError:
+                pass
+        path_str = "outputs/runtime"
+    root = Path(path_str)
     root.mkdir(parents=True, exist_ok=True)
     return root
 
