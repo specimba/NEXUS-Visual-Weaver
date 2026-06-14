@@ -57,6 +57,9 @@ def _image_data_url(path: str | None) -> str | None:
 
 
 def _post_json(url: str, token: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(f"Invalid URL: expected http(s) URL with host, got {url!r}.")
     body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         url,
@@ -67,9 +70,6 @@ def _post_json(url: str, token: str, payload: dict[str, Any], timeout: float) ->
         },
         method="POST",
     )
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in {"http", "https"}:
-        raise ValueError(f"Invalid URL scheme: {parsed.scheme}. Only http and https are allowed.")
     with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - URL comes from Space secret/config.
         return json.loads(response.read().decode("utf-8", errors="replace"))
 

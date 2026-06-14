@@ -51,7 +51,7 @@ Avoid pytest `--basetemp=C:\tmp` in this Windows sandbox if `tmp_path` fixtures 
 - OpenBMB prize claim requires `minicpm_judge.status == "success"` in an export packet.
 - NVIDIA prize claim requires `nemotron_evidence.status == "success"` in an export packet.
 - LocateAnything supports the grounding story but does not replace Nemotron for the NVIDIA prize.
-- Tiny Titan can be claimed for the public demo stack because each active public model is <=4B.
+- Tiny Titan can be claimed only from a successful public-demo export packet because each active public model is <=4B.
 - FLUX.2 Klein 9B and OFFELLIA/Gemma remain private research options only.
 - Modal is not claimed unless a real Modal job runs and is documented.
 

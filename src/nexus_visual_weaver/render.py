@@ -48,6 +48,31 @@ def _env_configured(*names: str) -> bool:
     return any(bool(os.environ.get(name)) for name in names)
 
 
+def _provider_configured(base_url_name: str, *key_names: str) -> bool:
+    return bool(os.environ.get(base_url_name)) and _env_configured(*key_names)
+
+
+_SCAN_REDACTION_TERMS = (
+    "payload",
+    "payload_excerpt",
+    "hidden content",
+    "recovered",
+    "raw byte",
+    "base64",
+    "hex dump",
+)
+
+
+def _redact_scan_text(value: object) -> str:
+    text = str(value)
+    lowered = text.lower()
+    if any(term in lowered for term in _SCAN_REDACTION_TERMS):
+        return "Redacted scan detail; review the gated ST3GG evidence packet."
+    if len(text) > 180:
+        return text[:177] + "..."
+    return text
+
+
 def _space_runtime_status() -> dict[str, str]:
     space_id = os.environ.get("SPACE_ID") or os.environ.get("HF_SPACE_ID") or "local-preview"
     hardware = os.environ.get("SPACE_HARDWARE") or os.environ.get("NEXUS_SPACE_HARDWARE") or "ZeroGPU"
@@ -55,9 +80,9 @@ def _space_runtime_status() -> dict[str, str]:
     configured = []
     if _env_configured("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"):
         configured.append("HF")
-    if _env_configured("MINICPM_API_KEY", "OPENBMB_API_KEY", "MINICPM_BASE_URL"):
+    if _provider_configured("MINICPM_BASE_URL", "MINICPM_API_KEY", "OPENBMB_API_KEY"):
         configured.append("MiniCPM")
-    if _env_configured("NEMOTRON_API_KEY", "NVIDIA_API_KEY", "NEMOTRON_BASE_URL"):
+    if _provider_configured("NEMOTRON_BASE_URL", "NEMOTRON_API_KEY", "NVIDIA_API_KEY"):
         configured.append("Nemotron")
     if _env_configured("FAL_KEY", "NETLIFY_AUTH_TOKEN", "OPENAI_API_KEY", "MODAL_TOKEN_ID"):
         configured.append("optional")
@@ -106,12 +131,12 @@ def render_trust_strip(scan: dict | None = None, operator_state: dict | None = N
     status = str(scan.get("status", "idle")).upper()
     export_gate = str(scan.get("export_gate", "pending")).upper()
     checkpoint = str(operator_state.get("checkpoint", "pending")).replace("_", " ").title()
-    findings = scan.get("findings") or ["No upload selected. Always-on scanner ready."]
-    actions = scan.get("purification_actions") or [
+    findings = [_redact_scan_text(item) for item in (scan.get("findings") or ["No upload selected. Always-on scanner ready."])]
+    actions = [_redact_scan_text(item) for item in (scan.get("purification_actions") or [
         "strip metadata before export",
         "truncate PNG after IEND when needed",
         "run LSB statistical review",
-    ]
+    ])]
     tone = _scan_status_tone(str(scan.get("status", "idle")))
     return f"""
     <section class="nw-trust-strip">
@@ -460,7 +485,7 @@ def render_operations_panel(
             ("ST3GG state", f"{scan_status} / export {export_gate}"),
             (
                 "Findings",
-                "; ".join(str(item) for item in (scan.get("findings") or [])[:2])
+                "; ".join(_redact_scan_text(item) for item in (scan.get("findings") or [])[:2])
                 or ("No findings." if scan_status != "IDLE" else "No upload selected."),
             ),
             ("Public export", "Consent, provenance, metadata, age, dataset, and payload gates stay active."),
@@ -563,8 +588,8 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
     relay_status = relay_status or {}
     decisions = relay_status.get("decisions", [])
     optional_statuses = {
-        "openbmb": "configured" if _env_configured("MINICPM_API_KEY", "OPENBMB_API_KEY", "MINICPM_BASE_URL") else "missing secret",
-        "nvidia": "configured" if _env_configured("NEMOTRON_API_KEY", "NVIDIA_API_KEY", "NEMOTRON_BASE_URL") else "missing secret",
+        "openbmb": "configured" if _provider_configured("MINICPM_BASE_URL", "MINICPM_API_KEY", "OPENBMB_API_KEY") else "missing secret",
+        "nvidia": "configured" if _provider_configured("NEMOTRON_BASE_URL", "NEMOTRON_API_KEY", "NVIDIA_API_KEY") else "missing secret",
         "fal": "configured" if _env_configured("FAL_KEY") else "blocked",
         "netlify": "configured" if _env_configured("NETLIFY_AUTH_TOKEN", "NETLIFY_SITE_ID", "OPENAI_BASE_URL") else "blocked",
         "cloudflare": "configured" if _env_configured("CLOUDFLARE_API_TOKEN", "CF_ACCOUNT_ID") else "blocked",
@@ -664,10 +689,10 @@ def render_inspector(
             ("NVIDIA Nemotron", "nvidia/NVIDIA-Nemotron-Parse-v1.2", nemotron),
         ]
     )
-    findings = scan.get("findings") or []
-    actions = scan.get("purification_actions") or ["metadata strip ready", "IEND truncation ready", "LSB review ready"]
-    finding_rows = "".join(f"<li>{escape(str(item))}</li>" for item in findings[:4]) or "<li>No upload selected. Scanner ready.</li>"
-    action_rows = "".join(f"<li>{escape(str(item))}</li>" for item in actions[:4])
+    findings = [_redact_scan_text(item) for item in (scan.get("findings") or [])]
+    actions = [_redact_scan_text(item) for item in (scan.get("purification_actions") or ["metadata strip ready", "IEND truncation ready", "LSB review ready"])]
+    finding_rows = "".join(f"<li>{escape(item)}</li>" for item in findings[:4]) or "<li>No upload selected. Scanner ready.</li>"
+    action_rows = "".join(f"<li>{escape(item)}</li>" for item in actions[:4])
     export_gate = str(scan.get("export_gate", "pending")).upper()
     return f"""
     <aside class="nw-panel nw-inspector">

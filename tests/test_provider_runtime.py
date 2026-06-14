@@ -7,6 +7,7 @@ from nexus_visual_weaver.provider_runtime import (
     ProviderJudgeResult,
     _extract_content,
     _image_data_url,
+    _post_json,
     _safe_json_from_text,
     _short_error,
     judge_with_minicpm,
@@ -359,3 +360,24 @@ def test_nemotron_uses_nvidia_api_key_as_fallback(monkeypatch) -> None:
 
     assert result.status == "success"
     assert captured["token"] == "nvidia-fallback-token"
+
+
+def test_post_json_rejects_unsupported_url_schemes_before_urlopen(monkeypatch) -> None:
+    called = False
+
+    def fake_urlopen(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("urlopen should not be called for invalid schemes")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    for url in ["file:///tmp/payload.json", "ftp://example.test/api", "http:///missing-host"]:
+        try:
+            _post_json(url, "token", {"ok": True}, 1.0)
+        except ValueError as exc:
+            assert "Invalid URL" in str(exc)
+        else:
+            raise AssertionError(f"{url} should have been rejected")
+
+    assert called is False

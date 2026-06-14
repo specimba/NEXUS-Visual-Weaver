@@ -10,6 +10,43 @@ from typing import Any
 
 from .catalog import active_stack, parameter_budget
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ALLOWED_LOCAL_EXPORT_ROOTS = (
+    REPO_ROOT / "outputs",
+    REPO_ROOT / ".pi",
+    REPO_ROOT / ".codex",
+)
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _safe_export_candidate(candidate: Path) -> Path | None:
+    if not candidate.is_absolute():
+        candidate = REPO_ROOT / candidate
+    resolved = candidate.resolve(strict=False)
+    src_root = (REPO_ROOT / "src").resolve(strict=False)
+    if resolved == src_root or _is_within(resolved, src_root):
+        return None
+
+    allowed_roots = [root.resolve(strict=False) for root in ALLOWED_LOCAL_EXPORT_ROOTS]
+    if Path("/data").exists():
+        allowed_roots.append(Path("/data/nexus_visual_weaver").resolve(strict=False))
+    if any(resolved == root or _is_within(resolved, root) for root in allowed_roots):
+        return resolved
+    return None
+
+
+def _artifact_name(output_path: Any) -> str | None:
+    if not output_path:
+        return None
+    return Path(str(output_path)).name
+
 
 def export_root() -> Path:
     requested = os.environ.get("NEXUS_EXPORT_DIR")
@@ -18,12 +55,15 @@ def export_root() -> Path:
         candidates.append(Path("/data/nexus_visual_weaver/exports"))
     candidates.append(Path("outputs/exports"))
     for candidate in candidates:
+        safe_candidate = _safe_export_candidate(candidate)
+        if safe_candidate is None:
+            continue
         try:
-            candidate.mkdir(parents=True, exist_ok=True)
-            return candidate
+            safe_candidate.mkdir(parents=True, exist_ok=True)
+            return safe_candidate
         except OSError:
             continue
-    fallback = Path("outputs/exports")
+    fallback = (REPO_ROOT / "outputs/exports").resolve(strict=False)
     fallback.mkdir(parents=True, exist_ok=True)
     return fallback
 
@@ -36,17 +76,22 @@ def write_export_packet(
     adult_mode: bool,
 ) -> dict[str, Any]:
     run_id = getattr(getattr(run, "checkpoint", None), "checkpoint_id", f"nw-{int(time.time())}")
-    stack = active_stack(adult_mode)
+    run_adult_mode = bool(getattr(getattr(run, "request", None), "adult_mode", adult_mode))
+    stack = list(getattr(run, "model_stack", None) or active_stack(run_adult_mode))
+    budget = parameter_budget(stack)
     generation = dict(operator_state.get("generation") or {})
     generation.pop("hf_token_present", None)
+    artifact = _artifact_name(generation.get("output_path"))
+    if "output_path" in generation:
+        generation["output_path"] = artifact
     packet = {
         "schema": "nexus_visual_weaver.export_packet.v1",
         "run_id": run_id,
         "created_at_epoch": int(time.time()),
-        "adult_mode": bool(adult_mode),
+        "adult_mode": run_adult_mode,
         "prompt": getattr(getattr(run, "request", None), "prompt", ""),
         "refined_prompt": getattr(getattr(run, "refined_prompt", None), "refined", ""),
-        "artifact": (operator_state.get("generation") or {}).get("output_path"),
+        "artifact": artifact,
         "generation": generation,
         "st3gg_scan": scan,
         "minicpm_judge": operator_state.get("minicpm_judge") or {},
@@ -66,9 +111,9 @@ def write_export_packet(
             }
             for model in stack
         ],
-        "parameter_budget": parameter_budget(stack),
+        "parameter_budget": budget,
         "hackathon_claims": {
-            "build_small_32b": parameter_budget(stack)["status"] == "pass",
+            "build_small_32b": budget["status"] == "pass",
             "gradio_space": True,
             "off_brand_custom_ui": True,
             "openbmb_lane": (operator_state.get("minicpm_judge") or {}).get("status") == "success",

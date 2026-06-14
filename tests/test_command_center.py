@@ -267,6 +267,20 @@ def test_render_trust_strip_review_scan_shows_blocked_export() -> None:
     assert "trailing data after IEND" in html
 
 
+def test_render_trust_strip_redacts_payload_details() -> None:
+    scan = {
+        "status": "review",
+        "export_gate": "blocked",
+        "findings": ["payload excerpt: deadbeef hidden content recovered"],
+        "purification_actions": ["raw byte hex dump should stay quarantined"],
+    }
+    html = render_trust_strip(scan=scan)
+
+    assert "Redacted scan detail" in html
+    assert "deadbeef" not in html
+    assert "hex dump" not in html
+
+
 def test_render_trust_strip_approved_checkpoint_shows_pass() -> None:
     operator_state = {"checkpoint": "approved", "provider_state": "export_ready"}
     html = render_trust_strip(operator_state=operator_state)
@@ -359,6 +373,7 @@ def test_render_provider_cards_shows_openbmb_and_nvidia_entries() -> None:
 
 def test_render_provider_cards_shows_sponsor_lane_badge_for_openbmb(monkeypatch) -> None:
     monkeypatch.setenv("MINICPM_API_KEY", "test-key")
+    monkeypatch.setenv("MINICPM_BASE_URL", "https://minicpm.example.test")
     html = render_provider_cards()
 
     assert "SPONSOR LANE" in html
@@ -376,9 +391,43 @@ def test_render_provider_cards_shows_missing_secret_for_unconfigured_sponsor(mon
 
 def test_render_provider_cards_configured_openbmb_shows_configured(monkeypatch) -> None:
     monkeypatch.setenv("MINICPM_API_KEY", "test-key")
+    monkeypatch.delenv("MINICPM_BASE_URL", raising=False)
+    monkeypatch.delenv("NEMOTRON_API_KEY", raising=False)
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    monkeypatch.delenv("NEMOTRON_BASE_URL", raising=False)
+    monkeypatch.delenv("FAL_KEY", raising=False)
+    monkeypatch.delenv("NETLIFY_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    html = render_provider_cards()
+
+    assert "CONFIGURED" not in html
+    assert "MISSING SECRET" in html
+
+
+def test_render_provider_cards_configured_openbmb_requires_key_and_base_url(monkeypatch) -> None:
+    monkeypatch.setenv("MINICPM_API_KEY", "test-key")
+    monkeypatch.setenv("MINICPM_BASE_URL", "https://minicpm.example.test")
     html = render_provider_cards()
 
     assert "CONFIGURED" in html
+
+
+def test_render_operations_and_inspector_redact_payload_details() -> None:
+    scan = {
+        "status": "review",
+        "export_gate": "blocked",
+        "findings": ["payload excerpt: recovered hidden content"],
+        "purification_actions": ["base64 raw bytes quarantined"],
+    }
+
+    operations = render_operations_panel(active_section="Security", scan=scan)
+    inspector = render_inspector(scan=scan)
+
+    assert "Redacted scan detail" in operations
+    assert "Redacted scan detail" in inspector
+    assert "recovered hidden content" not in operations
+    assert "base64 raw bytes" not in inspector
 
 
 # --- catalog public_demo field tests ---

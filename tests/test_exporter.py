@@ -33,6 +33,9 @@ def test_write_export_packet_records_evidence_without_secrets(monkeypatch) -> No
     assert payload["hackathon_claims"]["nvidia_nemotron_lane"] is False
     assert payload["parameter_budget"]["status"] == "pass"
     assert "token" not in json.dumps(payload).lower()
+    assert payload["artifact"] == "artifact.png"
+    assert payload["generation"]["output_path"] == "artifact.png"
+    assert "/data/" not in json.dumps(payload)
 
 
 def test_export_packet_has_correct_schema_version(monkeypatch) -> None:
@@ -49,17 +52,20 @@ def test_export_packet_has_correct_schema_version(monkeypatch) -> None:
 
 def test_export_packet_stores_adult_mode_flag(monkeypatch) -> None:
     monkeypatch.setenv("NEXUS_EXPORT_DIR", "outputs/test-exports")
-    run = build_command_center_run("dark couture brief")
+    run_public = build_command_center_run("dark couture brief", adult_mode=False)
+    run_private = build_command_center_run("dark couture brief", adult_mode=True)
     scan = {"status": "pass", "export_gate": "clear"}
 
-    result_public = write_export_packet(run=run, scan=scan, operator_state=_make_base_state(), adult_mode=False)
-    result_private = write_export_packet(run=run, scan=scan, operator_state=_make_base_state(), adult_mode=True)
+    result_public = write_export_packet(run=run_public, scan=scan, operator_state=_make_base_state(), adult_mode=True)
+    result_private = write_export_packet(run=run_private, scan=scan, operator_state=_make_base_state(), adult_mode=False)
 
     public_payload = json.loads(Path(result_public["path"]).read_text(encoding="utf-8"))
     private_payload = json.loads(Path(result_private["path"]).read_text(encoding="utf-8"))
 
     assert public_payload["adult_mode"] is False
     assert private_payload["adult_mode"] is True
+    assert public_payload["model_stack"][0]["repo_id"] == run_public.model_stack[0].repo_id
+    assert private_payload["model_stack"][0]["repo_id"] == run_private.model_stack[0].repo_id
 
 
 def test_export_packet_removes_hf_token_from_generation(monkeypatch) -> None:
@@ -97,12 +103,13 @@ def test_export_packet_hackathon_claims_both_success(monkeypatch) -> None:
 
 def test_export_packet_hackathon_claims_st3gg_export_gate(monkeypatch) -> None:
     monkeypatch.setenv("NEXUS_EXPORT_DIR", "outputs/test-exports")
-    run = build_command_center_run("scan gate test brief")
+    run_clear = build_command_center_run("scan gate test brief clear")
+    run_blocked = build_command_center_run("scan gate test brief blocked")
     scan_clear = {"status": "pass", "export_gate": "clear"}
     scan_blocked = {"status": "review", "export_gate": "blocked"}
 
-    result_clear = write_export_packet(run=run, scan=scan_clear, operator_state=_make_base_state(), adult_mode=False)
-    result_blocked = write_export_packet(run=run, scan=scan_blocked, operator_state=_make_base_state(), adult_mode=False)
+    result_clear = write_export_packet(run=run_clear, scan=scan_clear, operator_state=_make_base_state(), adult_mode=False)
+    result_blocked = write_export_packet(run=run_blocked, scan=scan_blocked, operator_state=_make_base_state(), adult_mode=False)
 
     payload_clear = json.loads(Path(result_clear["path"]).read_text(encoding="utf-8"))
     payload_blocked = json.loads(Path(result_blocked["path"]).read_text(encoding="utf-8"))
@@ -127,14 +134,26 @@ def test_export_packet_includes_model_stack_and_prompts(monkeypatch) -> None:
     assert isinstance(payload["created_at_epoch"], int)
 
 
-def test_export_root_uses_nexus_export_dir_env(monkeypatch, tmp_path) -> None:
-    custom_dir = tmp_path / "custom_export"
+def test_export_root_uses_nexus_export_dir_env(monkeypatch) -> None:
+    custom_dir = Path("outputs/test-exports/custom_export")
     monkeypatch.setenv("NEXUS_EXPORT_DIR", str(custom_dir))
 
     root = export_root()
 
-    assert root == custom_dir
-    assert custom_dir.is_dir()
+    assert root == custom_dir.resolve()
+    assert root.is_dir()
+
+
+def test_export_root_rejects_src_export_dir(monkeypatch) -> None:
+    unsafe_dir = Path("src/nexus_visual_weaver/export-leak")
+    monkeypatch.setenv("NEXUS_EXPORT_DIR", str(unsafe_dir))
+
+    root = export_root()
+
+    src_root = (Path.cwd() / "src").resolve()
+    assert root != src_root
+    assert src_root not in root.parents
+    assert not unsafe_dir.exists()
 
 
 def test_export_root_falls_back_to_outputs_when_no_env(monkeypatch) -> None:

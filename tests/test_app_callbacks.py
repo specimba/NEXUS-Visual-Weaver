@@ -146,6 +146,66 @@ def test_export_blocks_without_checkpoint() -> None:
     assert "checkpoint" in blocked[13]["message"].lower()
 
 
+def test_reference_scan_cannot_clear_blocked_generated_artifact() -> None:
+    base = app.ROOT / "outputs" / "test-app-callbacks"
+    base.mkdir(parents=True, exist_ok=True)
+    blocked_artifact = base / "blocked-generated.png"
+    blocked_artifact.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIEND\xaeB`\x82"
+        b"NEXUS_TRAILING_PAYLOAD"
+    )
+    clean_reference = base / "clean-reference.png"
+    clean_reference.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIEND\xaeB`\x82")
+    run = build_command_center_run("gothic patent leather platform boots")
+    state = {
+        "provider_state": "checkpointed",
+        "checkpoint": "pending_review",
+        "export": "blocked",
+        "generation": {"status": "success", "output_path": str(blocked_artifact)},
+        "generated_scan": app.scan_file(str(blocked_artifact)),
+    }
+
+    scanned = app.scan_reference(run, False, str(clean_reference), "Forge", state)
+    assert scanned[13]["reference_scan"]["export_gate"] == "clear"
+    assert scanned[13]["export"] == "blocked"
+    assert scanned[15]["export_gate"] == "blocked"
+
+    approved = app.approve_checkpoint(run, False, scanned[15], "Forge", scanned[13])
+    assert approved[13]["provider_state"] == "checkpointed"
+    assert approved[13]["export"] == "blocked"
+
+
+def test_blocked_reference_scan_does_not_block_clear_generated_artifact() -> None:
+    base = app.ROOT / "outputs" / "test-app-callbacks"
+    base.mkdir(parents=True, exist_ok=True)
+    generated = base / "clear-generated.png"
+    generated.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIEND\xaeB`\x82")
+    blocked_reference = base / "blocked-reference.png"
+    blocked_reference.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIEND\xaeB`\x82"
+        b"NEXUS_TRAILING_PAYLOAD"
+    )
+    run = build_command_center_run("gothic patent leather platform boots")
+    state = {
+        "provider_state": "checkpointed",
+        "checkpoint": "pending_review",
+        "export": "clear",
+        "generation": {"status": "success", "output_path": str(generated)},
+        "generated_scan": app.scan_file(str(generated)),
+    }
+
+    scanned = app.scan_reference(run, False, str(blocked_reference), "Forge", state)
+    assert scanned[13]["reference_scan"]["export_gate"] == "blocked"
+    assert scanned[13]["export"] == "clear"
+    assert scanned[15]["export_gate"] == "clear"
+
+    approved = app.approve_checkpoint(run, False, scanned[15], "Forge", scanned[13])
+    assert approved[13]["provider_state"] == "export_ready"
+    assert approved[13]["export"] == "clear"
+
+
 def test_checkpoint_blocks_without_generated_artifact() -> None:
     result = app.run_weave(
         "gothic patent leather platform boots, crimson hardware",

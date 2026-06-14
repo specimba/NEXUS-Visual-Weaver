@@ -77,6 +77,20 @@ def _file_path(uploaded: Any) -> str | None:
     return str(path) if path else None
 
 
+def _generated_output_path(operator_state: dict[str, Any] | None) -> str | None:
+    generation = (operator_state or {}).get("generation") or {}
+    output_path = generation.get("output_path")
+    return str(output_path) if output_path else None
+
+
+def _authoritative_generated_scan(operator_state: dict[str, Any] | None) -> dict[str, Any]:
+    output_path = _generated_output_path(operator_state)
+    if output_path:
+        return scan_file(output_path)
+    stored_scan = (operator_state or {}).get("generated_scan")
+    return stored_scan if isinstance(stored_scan, dict) else scan_file(None)
+
+
 def _checkpoint_seed(checkpoint_id: str) -> int:
     suffix = "".join(char for char in checkpoint_id[-8:] if char in "0123456789abcdefABCDEF")
     if not suffix:
@@ -133,7 +147,7 @@ def run_weave(
     )
     reference_scan = scan_file(_file_path(upload))
     generation = generate_flux_image(run.refined_prompt.refined, seed=_checkpoint_seed(run.checkpoint.checkpoint_id))
-    generated_scan = scan_file(generation.output_path) if generation.output_path else reference_scan
+    generated_scan = scan_file(generation.output_path) if generation.output_path else scan_file(None)
     minicpm = judge_with_minicpm(
         prompt=run.refined_prompt.refined,
         image_path=generation.output_path,
@@ -278,26 +292,32 @@ def scan_reference(
     active_section: str,
     operator_state: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
-    scan = scan_file(_file_path(upload))
+    state = operator_state or _default_operator_state()
+    reference_path = _file_path(upload)
+    reference_scan = scan_file(reference_path)
+    generated_scan = _authoritative_generated_scan(state)
     minicpm = None
-    if run is not None:
-        generated_path = ((operator_state or {}).get("generation") or {}).get("output_path")
-        if generated_path:
-            minicpm = judge_with_minicpm(
-                prompt=getattr(getattr(run, "refined_prompt", None), "refined", DEFAULT_PROMPT),
-                image_path=generated_path,
-                scan=scan,
-                wardrobe_summary=_wardrobe_summary(run),
-            )
+    if run is not None and reference_path:
+        minicpm = judge_with_minicpm(
+            prompt=getattr(getattr(run, "refined_prompt", None), "refined", DEFAULT_PROMPT),
+            image_path=reference_path,
+            scan=reference_scan,
+            wardrobe_summary=_wardrobe_summary(run),
+        )
     next_state = {
-        **(operator_state or _default_operator_state()),
+        **state,
         **({"reference_judge": minicpm.to_dict()} if minicpm else {}),
-        "reference_scan": scan,
-        "export": scan.get("export_gate", "pending"),
-        "message": "Reference scan complete. Export gate is clear." if scan.get("export_gate") == "clear" else "Reference scan requires review before export.",
+        "reference_scan": reference_scan,
+        "reference_export_gate": reference_scan.get("export_gate", "pending"),
+        "export": state.get("export", generated_scan.get("export_gate", "pending")),
+        "message": (
+            "Reference scan complete. Generated artifact export gate is unchanged."
+            if reference_scan.get("export_gate") == "clear"
+            else "Reference scan requires review. Generated artifact export gate is unchanged."
+        ),
     }
-    rendered = _render_stateful(run, adult_mode, scan, active_section, next_state)
-    return (*rendered, scan)
+    rendered = _render_stateful(run, adult_mode, generated_scan, active_section, next_state)
+    return (*rendered, generated_scan)
 
 
 def approve_checkpoint(
@@ -307,12 +327,13 @@ def approve_checkpoint(
     active_section: str,
     operator_state: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
-    scan = scan or scan_file(None)
+    state = operator_state or _default_operator_state()
+    scan = _authoritative_generated_scan(state)
     if run is None:
         next_state = {**_default_operator_state(), "provider_state": "blocked", "message": "No run exists yet. Run Active Weave first."}
-    elif not ((operator_state or {}).get("generation") or {}).get("output_path"):
+    elif not _generated_output_path(state):
         next_state = {
-            **(operator_state or _default_operator_state()),
+            **state,
             "provider_state": "blocked",
             "checkpoint": "pending",
             "message": "Checkpoint blocked: no generated artifact exists yet.",
@@ -320,9 +341,10 @@ def approve_checkpoint(
     else:
         export_state = scan.get("export_gate", "pending")
         next_state = {
-            **(operator_state or _default_operator_state()),
+            **state,
             "provider_state": "export_ready" if export_state == "clear" else "checkpointed",
             "checkpoint": "approved",
+            "generated_scan": scan,
             "export": export_state,
             "message": "Checkpoint approved. Export is ready after clear ST3GG scan." if export_state == "clear" else "Checkpoint approved, but export still waits on ST3GG review.",
         }
@@ -336,12 +358,14 @@ def export_packet(
     active_section: str,
     operator_state: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
-    scan = scan or scan_file(None)
     state = operator_state or _default_operator_state()
+    scan = _authoritative_generated_scan(state)
     if run is None:
         next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export blocked: no active run packet exists."}
     elif state.get("checkpoint") != "approved":
         next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export blocked: human checkpoint has not been approved."}
+    elif not _generated_output_path(state):
+        next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export blocked: no generated artifact exists."}
     elif scan.get("export_gate") != "clear":
         next_state = {**state, "provider_state": "blocked", "export": scan.get("export_gate", "blocked"), "message": "Export blocked: ST3GG gate is not clear."}
     else:

@@ -97,12 +97,13 @@ Public demo mode excludes private, commercial-uncleared, and research-only helpe
 | OpenAI Codex | Development branch and PR include Codex-authored implementation commits. |
 | Demo / social | Add final links here before submission: `DEMO_VIDEO_URL` and `SOCIAL_POST_URL`. |
 
-Tiny Titan can be claimed for the public demo stack because the active public models are each <=4B. The stronger FLUX.2 Klein 9B and OFFELLIA/Gemma stack remains private research only.
+Tiny Titan can be claimed only from a successful public-demo export packet because the active public models are each <=4B. The stronger FLUX.2 Klein 9B and OFFELLIA/Gemma stack remains private research only.
 
 ## Local Setup
 
 ```powershell
 python -m pip install -r requirements.txt
+$env:NEXUS_DISABLE_REAL_HF='1'
 python app.py
 ```
 
