@@ -23,7 +23,7 @@ def export_root() -> Path:
         try:
             candidate.mkdir(parents=True, exist_ok=True)
             return candidate
-        except PermissionError:
+        except OSError:
             continue
     fallback = Path("outputs/exports")
     fallback.mkdir(parents=True, exist_ok=True)
