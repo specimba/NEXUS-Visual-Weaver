@@ -44,6 +44,14 @@ DEFAULT_PROMPT = (
 MODEL_RELAY = WeaverModelRelay()
 
 
+def _zero_gpu_entrypoint(fn: Any) -> Any:
+    """Expose one callback to ZeroGPU without making local development depend on Spaces."""
+    gpu_decorator = getattr(spaces, "GPU", None) if spaces is not None else None
+    if gpu_decorator is None:
+        return fn
+    return gpu_decorator(duration=30)(fn)
+
+
 def _relay_snapshot(adult_mode: bool = False) -> dict[str, Any]:
     return MODEL_RELAY.dashboard_snapshot(public_demo=not adult_mode)
 
@@ -75,6 +83,7 @@ def _dashboard_regions(
     )
 
 
+@_zero_gpu_entrypoint
 def run_weave(
     prompt: str,
     reasoning_mode: str,
