@@ -113,6 +113,11 @@ def test_dashboard_regions_render_with_empty_relay_and_default_scan() -> None:
 
 
 def test_dashboard_operations_follow_selected_section() -> None:
+    """
+    Verify that dashboard operations and command rail update consistently across different active sections.
+    
+    Asserts that the operations panel displays the active section name and its corresponding marker, while the command rail correctly reflects the selected section.
+    """
     relay = WeaverModelRelay()
     sections = {
         "Wardrobe": "Footwear focus",
@@ -135,6 +140,12 @@ def test_dashboard_operations_follow_selected_section() -> None:
 
 
 def test_security_operations_distinguish_clean_scan_from_idle() -> None:
+    """
+    Validate that the Security operations panel distinguishes a clean scan from an unselected state.
+    
+    When provided a clean scan (status "pass", no findings), the panel displays "No findings."
+    but does not display "No upload selected." (the idle-state message).
+    """
     clean_scan = {"status": "pass", "export_gate": "clear", "findings": []}
     html = render_operations_panel(active_section="Security", scan=clean_scan)
 

@@ -83,6 +83,12 @@ def run_weave(
     upload: Any,
     active_section: str,
 ) -> tuple[str, str, str, str, str, str, str, str, str, str, dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """
+    Executes a weave run with the provided parameters and returns all rendered dashboard components and metadata.
+    
+    Returns:
+    	A tuple containing nine rendered HTML region strings (topbar, command rail, workflow, operations, inspector, drawer, status, artifacts, providers), catalog HTML, a run record dictionary, catalog summary dictionary, and security scan results dictionary.
+    """
     prompt = prompt.strip() or DEFAULT_PROMPT
     run = build_command_center_run(
         prompt=prompt,
@@ -115,6 +121,23 @@ def toggle_adult_visibility(
     active_section: str,
     upload: Any,
 ) -> tuple[str, str, str, str, str, str, str, dict[str, Any], dict[str, Any]]:
+    """
+    Update dashboard visibility based on adult mode setting.
+    
+    Re-renders all dashboard regions to reflect the current adult mode state without creating a new generation run.
+    
+    Returns:
+        tuple: A tuple containing:
+            - Updated topbar HTML (str)
+            - Updated command rail HTML (str)
+            - Updated operations HTML (str)
+            - Updated inspector HTML (str)
+            - Updated artifacts HTML (str)
+            - Updated providers HTML (str)
+            - Updated catalog table HTML (str)
+            - Catalog summary metadata (dict)
+            - Scan results (dict)
+    """
     scan = scan_file(_file_path(upload))
     regions = _dashboard_regions(adult_mode=adult_mode, scan=scan, active_section=active_section)
     return (
@@ -135,6 +158,12 @@ def refresh_section(
     adult_mode: bool,
     upload: Any,
 ) -> tuple[str, str, str, str, str, dict[str, Any]]:
+    """
+    Updates dashboard regions for the selected navigation section.
+    
+    Returns:
+        A tuple containing HTML strings for command_rail, operations, inspector, artifacts, and providers regions, followed by the security scan results.
+    """
     scan = scan_file(_file_path(upload))
     regions = _dashboard_regions(adult_mode=adult_mode, scan=scan, active_section=active_section)
     return regions["command_rail"], regions["operations"], regions["inspector"], regions["artifacts"], regions["providers"], scan
