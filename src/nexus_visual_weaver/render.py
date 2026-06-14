@@ -603,7 +603,7 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
               <strong>{escape(provider.title())}</strong>
               <span>off by default / secrets required</span>
               <i class="nw-provider-meter" style="--health:{'74' if state == 'configured' else '18'}"></i>
-              <div>{badge(state.upper(), "pass" if state == "configured" else "warn")}{badge("SPONSOR LANE" if provider in {"openbmb", "nvidia"} else "NOT MVP DEFAULT", "muted")}</div>
+              <div>{badge(state.upper(), "pass" if state == "configured" else "warn")}{badge("SPONSOR LANE" if provider in {"openbmb", "nvidia", "hf_nvidia"} else "NOT MVP DEFAULT", "muted")}</div>
             </div>
             """
         )
