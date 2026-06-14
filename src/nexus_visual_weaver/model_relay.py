@@ -15,6 +15,7 @@ from typing import Any
 
 PINNED_LANES = {"image_generation", "grounding", "security"}
 ROTATABLE_LANES = {
+    "private_image_research",
     "prompt_router",
     "taste_judge",
     "audio_lore_tts",
@@ -430,18 +431,31 @@ class WeaverModelRelay:
 def default_model_records() -> list[ModelRecord]:
     return [
         ModelRecord(
-            model_id="flux2-klein-primary",
+            model_id="flux2-klein-4b-public",
             lane="image_generation",
+            provider="hf",
+            repo_id="black-forest-labs/FLUX.2-klein-4B",
+            license_gate="apache-2.0",
+            params_b=4.0,
+            cost_hint="provider_or_local",
+            rpm_limit=8,
+            rpd_limit=60,
+            quality_score=0.92,
+            latency_ms=21000,
+            pinned=True,
+        ),
+        ModelRecord(
+            model_id="flux2-klein-9b-private",
+            lane="private_image_research",
             provider="hf",
             repo_id="black-forest-labs/FLUX.2-klein-9B",
             license_gate="review_required",
             params_b=9.0,
-            cost_hint="provider_or_local",
-            rpm_limit=8,
-            rpd_limit=60,
+            cost_hint="gated_provider_or_private_space",
+            rpm_limit=6,
+            rpd_limit=40,
             quality_score=0.96,
             latency_ms=26000,
-            pinned=True,
         ),
         ModelRecord(
             model_id="locateanything-3b-anchor",

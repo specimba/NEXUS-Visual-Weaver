@@ -6,22 +6,33 @@ from .schema import AdapterRecipe, ModelCandidate
 
 MODEL_CATALOG: list[ModelCandidate] = [
     ModelCandidate(
-        repo_id="black-forest-labs/FLUX.2-klein-9B",
+        repo_id="black-forest-labs/FLUX.2-klein-4B",
         role="image_generator",
         task="image-to-image",
-        params_b=9.0,
+        params_b=4.0,
         runtime="diffusers / provider",
+        license="apache-2.0",
+        source_url="https://hf.co/black-forest-labs/FLUX.2-klein-4B",
+    ),
+    ModelCandidate(
+        repo_id="black-forest-labs/FLUX.2-klein-9B",
+        role="private_research_image_generator",
+        task="image-to-image",
+        params_b=9.0,
+        runtime="diffusers / gated provider",
         license="other",
         gated=True,
+        public_demo=False,
         source_url="https://hf.co/black-forest-labs/FLUX.2-klein-9B",
     ),
     ModelCandidate(
         repo_id="Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
-        role="multimodal_judge",
+        role="private_research_multimodal_judge",
         task="image-text-to-text",
         params_b=12.0,
         runtime="llama.cpp GGUF",
         license="apache-2.0",
+        public_demo=False,
         source_url="https://hf.co/Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
     ),
     ModelCandidate(
@@ -102,8 +113,20 @@ MODEL_CATALOG: list[ModelCandidate] = [
 ADAPTER_CATALOG: list[AdapterRecipe] = [
     AdapterRecipe(
         repo_id="DeverStyle/Flux.2-Klein-Loras",
-        adapter_for="black-forest-labs/FLUX.2-klein-9B",
+        adapter_for="black-forest-labs/FLUX.2-klein-4B",
         task="text-to-image style stack",
+        license="apache-2.0",
+    ),
+    AdapterRecipe(
+        repo_id="fal/flux-2-klein-4B-outpaint-lora",
+        adapter_for="black-forest-labs/FLUX.2-klein-4B",
+        task="outpaint/inpaint public demo helper",
+        license="apache-2.0",
+    ),
+    AdapterRecipe(
+        repo_id="thedeoxen/refcontrol-FLUX.2-klein-4B-reference-depth-lora",
+        adapter_for="black-forest-labs/FLUX.2-klein-base-4B",
+        task="reference-depth control for garment layout",
         license="apache-2.0",
     ),
     AdapterRecipe(
@@ -147,6 +170,15 @@ ADAPTER_CATALOG: list[AdapterRecipe] = [
 ]
 
 DEFAULT_ACTIVE_STACK = [
+    "black-forest-labs/FLUX.2-klein-4B",
+    "nvidia/LocateAnything-3B",
+    "openbmb/MiniCPM-V-4.6",
+    "nvidia/NVIDIA-Nemotron-Parse-v1.2",
+    "openbmb/MiniCPM5-1B",
+    "onnx-community/functiongemma-270m-it-ONNX",
+]
+
+PRIVATE_RESEARCH_STACK = [
     "black-forest-labs/FLUX.2-klein-9B",
     "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
     "nvidia/LocateAnything-3B",
@@ -157,7 +189,11 @@ DEFAULT_ACTIVE_STACK = [
 
 
 def filter_catalog(adult_mode: bool = False) -> tuple[list[ModelCandidate], list[AdapterRecipe]]:
-    models = [model for model in MODEL_CATALOG if adult_mode or not model.adult_only]
+    models = [
+        model
+        for model in MODEL_CATALOG
+        if (adult_mode or not model.adult_only) and (adult_mode or model.public_demo)
+    ]
     adapters = [adapter for adapter in ADAPTER_CATALOG if adult_mode or not adapter.adult_only]
     return models, adapters
 
@@ -165,7 +201,8 @@ def filter_catalog(adult_mode: bool = False) -> tuple[list[ModelCandidate], list
 def active_stack(adult_mode: bool = False) -> list[ModelCandidate]:
     allowed, _ = filter_catalog(adult_mode)
     by_id = {model.repo_id: model for model in allowed}
-    return [by_id[repo_id] for repo_id in DEFAULT_ACTIVE_STACK if repo_id in by_id]
+    stack_ids = PRIVATE_RESEARCH_STACK if adult_mode else DEFAULT_ACTIVE_STACK
+    return [by_id[repo_id] for repo_id in stack_ids if repo_id in by_id]
 
 
 def parameter_budget(stack: list[ModelCandidate] | None = None) -> dict[str, float | str]:

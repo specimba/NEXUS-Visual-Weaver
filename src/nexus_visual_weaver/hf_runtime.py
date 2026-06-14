@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 
 
-FLUX_REPO_ID = "black-forest-labs/FLUX.2-klein-9B"
+FLUX_REPO_ID = "black-forest-labs/FLUX.2-klein-4B"
+PRIVATE_RESEARCH_FLUX_REPO_ID = "black-forest-labs/FLUX.2-klein-9B"
 
 
 @dataclass(frozen=True)
@@ -98,7 +99,7 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
             status="no_cuda",
             provider_state="blocked",
             repo_id=FLUX_REPO_ID,
-            message="CUDA is not available to the Space callback; FLUX.2 9B requires GPU execution.",
+            message="CUDA is not available to the Space callback; FLUX.2 Klein 4B requires GPU execution.",
             width=width,
             height=height,
             steps=steps,
@@ -126,7 +127,7 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
             provider_state="generated",
             repo_id=FLUX_REPO_ID,
             output_path=str(output_path),
-            message="FLUX.2 Klein generated a real image artifact on HF Space.",
+            message="FLUX.2 Klein 4B generated a real public-demo artifact on HF Space.",
             latency_seconds=round(time.perf_counter() - started, 2),
             width=width,
             height=height,

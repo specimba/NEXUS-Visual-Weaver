@@ -1,6 +1,6 @@
 from PIL import Image
 
-from nexus_visual_weaver.hf_runtime import generate_flux_image, hf_runtime_enabled
+from nexus_visual_weaver.hf_runtime import FLUX_REPO_ID, PRIVATE_RESEARCH_FLUX_REPO_ID, generate_flux_image, hf_runtime_enabled
 from nexus_visual_weaver.render import render_artifact_lane
 
 
@@ -14,6 +14,12 @@ def test_hf_runtime_is_disabled_locally_by_default(monkeypatch) -> None:
     result = generate_flux_image("test prompt")
     assert result.status == "disabled"
     assert result.provider_state == "dry-run"
+    assert result.repo_id == "black-forest-labs/FLUX.2-klein-4B"
+
+
+def test_public_and_private_flux_repo_ids_are_split() -> None:
+    assert FLUX_REPO_ID == "black-forest-labs/FLUX.2-klein-4B"
+    assert PRIVATE_RESEARCH_FLUX_REPO_ID == "black-forest-labs/FLUX.2-klein-9B"
 
 
 def test_artifact_lane_embeds_generated_image() -> None:

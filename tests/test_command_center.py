@@ -47,6 +47,24 @@ def test_active_parameter_budget_passes_default_stack() -> None:
     assert budget["active_b"] <= 32.0
 
 
+def test_public_stack_uses_flux_4b_and_excludes_private_models() -> None:
+    stack = active_stack(False)
+    repo_ids = {model.repo_id for model in stack}
+
+    assert "black-forest-labs/FLUX.2-klein-4B" in repo_ids
+    assert "black-forest-labs/FLUX.2-klein-9B" not in repo_ids
+    assert not any("OFFELLIA" in repo_id for repo_id in repo_ids)
+    assert all(model.params_b <= 4.0 for model in stack)
+
+
+def test_private_catalog_keeps_stronger_research_models_available() -> None:
+    private_models, _ = filter_catalog(True)
+    repo_ids = {model.repo_id for model in private_models}
+
+    assert "black-forest-labs/FLUX.2-klein-9B" in repo_ids
+    assert "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf" in repo_ids
+
+
 def test_command_center_run_is_checkpointed() -> None:
     run = build_command_center_run(
         "Slavic model, patent leather, faux fur, Chantilly lace, crimson hardware, platform boots, NEXUS sigils"
@@ -54,7 +72,7 @@ def test_command_center_run_is_checkpointed() -> None:
     assert run.checkpoint.checkpoint_id.startswith("nw-")
     assert run.video.checkpoint_required is True
     assert run.inspection.targets
-    assert run.model_stack[2].repo_id == "nvidia/LocateAnything-3B"
+    assert any(model.repo_id == "nvidia/LocateAnything-3B" for model in run.model_stack)
 
 
 def test_security_scan_does_not_return_payload_excerpt() -> None:
@@ -75,6 +93,18 @@ def test_security_scan_flags_extension_magic_mismatch() -> None:
     assert scan["status"] == "review"
     assert scan["export_gate"] == "blocked"
     assert any("extension does not match" in finding for finding in scan["findings"])
+
+
+def test_security_scan_safe_vs_blocked_fixtures() -> None:
+    fixture_dir = Path(__file__).parent / "fixtures"
+    safe = scan_file(str(fixture_dir / "st3gg_safe_clean.png"))
+    blocked = scan_file(str(fixture_dir / "st3gg_blocked_trailing.png"))
+
+    assert safe["status"] == "pass"
+    assert safe["export_gate"] == "clear"
+    assert blocked["status"] == "review"
+    assert blocked["export_gate"] == "blocked"
+    assert any("trailing data" in finding for finding in blocked["findings"])
 
 
 def test_dashboard_regions_expose_artifacts_and_provider_cards() -> None:
@@ -102,6 +132,8 @@ def test_dashboard_regions_expose_artifacts_and_provider_cards() -> None:
     assert "Provider Handoff Cards" in regions["providers"]
     assert "nw-provider-meter" in regions["providers"]
     assert "Selected: Forge" in regions["command_rail"]
+    assert "TRUST MODEL" in regions["topbar"]
+    assert "Clean PNG -> pass" in regions["topbar"]
     assert "ST3GG Scan" in regions["inspector"]
     assert "nw-weave-console" in regions["workflow"]
     assert "Hackathon Signal" in regions["workflow"]
@@ -165,7 +197,7 @@ def test_command_header_exposes_governed_run_controls() -> None:
 
     assert "Raven Chronicle Active Weave" in header
     assert "ST3GG ALWAYS ON" in header
-    assert "FLUX.2 PINNED" in header
+    assert "FLUX.2 4B PINNED" in header
     assert "HUMAN CHECKPOINT" in header
 
 

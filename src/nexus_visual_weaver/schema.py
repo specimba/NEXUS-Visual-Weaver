@@ -71,6 +71,7 @@ class ModelCandidate:
     license: str
     gated: bool = False
     adult_only: bool = False
+    public_demo: bool = True
     source_url: str = ""
 
 
@@ -150,4 +151,3 @@ class WisdomRecord:
     dataset_target: str
     lessons: list[str]
     created_at: str = field(default_factory=utc_now)
-

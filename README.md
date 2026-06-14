@@ -10,7 +10,7 @@ pinned: false
 license: apache-2.0
 short_description: Governed gothic couture visual creation command center
 models:
-  - black-forest-labs/FLUX.2-klein-9B
+  - black-forest-labs/FLUX.2-klein-4B
   - nvidia/LocateAnything-3B
   - openbmb/MiniCPM-V-4.6
   - nvidia/NVIDIA-Nemotron-Parse-v1.2
@@ -49,7 +49,7 @@ The interface is built around a command-center surface:
 
 Pinned lanes do not rotate:
 
-- `image_generation`: FLUX.2 primary image lane
+- `image_generation`: public-demo FLUX.2 Klein 4B image lane
 - `grounding`: NVIDIA LocateAnything-3B grounding anchor
 - `security`: ST3GG defensive scanner/export gate
 
@@ -67,12 +67,13 @@ Helper lanes may rotate with quota, license, health, and parameter-budget checks
 - HF catalog research
 - Modal job runner
 
-Public demo mode excludes private, commercial-uncleared, and research-only helper models. Private research mode can expose more candidates, but it never disables consent, provenance, ST3GG, export, or dataset-partition gates.
+Public demo mode excludes private, commercial-uncleared, and research-only helper models. Private research mode keeps the gated FLUX.2 Klein 9B and OFFELLIA/Gemma routes available, but it never disables consent, provenance, ST3GG, export, or dataset-partition gates.
 
 ## Current Features
 
 - Gradio Blocks dashboard with split update regions.
-- Real FLUX.2 Klein image generation on Hugging Face ZeroGPU when `HF_TOKEN` is configured.
+- Real FLUX.2 Klein 4B image generation on Hugging Face ZeroGPU when runtime access is configured.
+- Above-fold ST3GG trust strip with safe-vs-blocked fixture evidence.
 - Generated artifact ST3GG scan and checkpoint/export state.
 - Optional MiniCPM-V and Nemotron provider evidence lanes with explicit configured/missing-secret status.
 - Active workflow graph and checkpointed run record.
@@ -88,7 +89,7 @@ Public demo mode excludes private, commercial-uncleared, and research-only helpe
 | Target | Evidence status |
 | --- | --- |
 | Gradio Space | App runs as a public Hugging Face Gradio Space with `mcp_server=True`. |
-| <=32B models | Active stack is 28.15B: FLUX.2 9B + OFFELLIA 12B + LocateAnything 3.83B + MiniCPM-V 1.30B + Nemotron Parse 0.94B + MiniCPM5 1.08B. |
+| <=32B models | Public stack is 11.42B: FLUX.2 Klein 4B + LocateAnything 3.83B + MiniCPM-V 1.30B + Nemotron Parse 0.94B + MiniCPM5 1.08B + FunctionGemma 0.27B. |
 | Off Brand | Custom command-center UI, dense inspector, workflow graph, wardrobe/lore drawer, and provider cards. |
 | Best Agent | Multi-step prompt, generation, scan, judge, checkpoint, export workflow. |
 | OpenBMB | Claimed only when MiniCPM-V returns judge evidence in an export packet. |
@@ -96,7 +97,7 @@ Public demo mode excludes private, commercial-uncleared, and research-only helpe
 | OpenAI Codex | Development branch and PR include Codex-authored implementation commits. |
 | Demo / social | Add final links here before submission: `DEMO_VIDEO_URL` and `SOCIAL_POST_URL`. |
 
-Tiny Titan is not claimed in the default demo because FLUX.2 Klein 9B is retained for image quality.
+Tiny Titan can be claimed for the public demo stack because the active public models are each <=4B. The stronger FLUX.2 Klein 9B and OFFELLIA/Gemma stack remains private research only.
 
 ## Local Setup
 

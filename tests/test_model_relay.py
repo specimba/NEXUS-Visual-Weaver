@@ -11,9 +11,19 @@ def test_pinned_lanes_do_not_rotate() -> None:
     assert decision.pinned is True
     assert decision.rotatable is False
     assert decision.primary is not None
-    assert decision.primary.repo_id == "black-forest-labs/FLUX.2-klein-9B"
+    assert decision.primary.repo_id == "black-forest-labs/FLUX.2-klein-4B"
+    assert decision.primary.params_b == 4.0
     assert decision.fallbacks == []
     assert "rotation disabled" in decision.reason
+
+
+def test_private_image_research_keeps_flux_9b_available() -> None:
+    relay = WeaverModelRelay()
+    decision = relay.select_lane("private_image_research", budget=9.0, public_demo=False, strategy="private_research")
+
+    assert decision.primary is not None
+    assert decision.primary.repo_id == "black-forest-labs/FLUX.2-klein-9B"
+    assert decision.primary.pinned is False
 
 
 def test_public_private_taste_judge_respects_license_and_budget() -> None:
@@ -65,8 +75,8 @@ def test_metadata_dedup_prevents_repeated_hf_lookup() -> None:
         calls["count"] += 1
         return {"calls": calls["count"]}
 
-    first = relay.metadata_lookup("hf:black-forest-labs/FLUX.2-klein-9B", resolver)
-    second = relay.metadata_lookup("hf:black-forest-labs/FLUX.2-klein-9B", resolver)
+    first = relay.metadata_lookup("hf:black-forest-labs/FLUX.2-klein-4B", resolver)
+    second = relay.metadata_lookup("hf:black-forest-labs/FLUX.2-klein-4B", resolver)
 
     assert first == second == {"calls": 1}
     assert calls["count"] == 1
@@ -113,7 +123,7 @@ def test_dashboard_surfaces_gmr_pinned_models_and_fallbacks() -> None:
     html = render_dashboard(relay_status=relay.dashboard_snapshot(public_demo=True))
 
     assert "GMR ModelRelay" in html
-    assert "FLUX.2 pinned" in html
+    assert "FLUX.2 4B pinned" in html
     assert "LocateAnything pinned" in html
     assert "fallback:" in html
     assert "Rotation Safe" in html
