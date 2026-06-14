@@ -138,3 +138,79 @@ def test_optional_external_gateways_are_registered_but_excluded_by_default() -> 
     assert relay.records["netflix-void-modal"].health == "healthy"
     assert relay.records["netlify-ai-gateway-helper"].health == "excluded"
     assert relay.records["fal-media-adapter"].health == "excluded"
+
+
+def test_minicpm_v46_is_registered_in_taste_judge_lane() -> None:
+    relay = WeaverModelRelay()
+
+    record = relay.records["minicpm-v46-visual-judge"]
+
+    assert record.lane == "taste_judge"
+    assert record.repo_id == "openbmb/MiniCPM-V-4.6"
+    assert record.provider == "openbmb"
+    assert record.params_b == 1.30
+    assert record.license_gate == "apache-2.0"
+    assert record.health == "healthy"
+
+
+def test_nemotron_parse_is_registered_in_taste_judge_lane() -> None:
+    relay = WeaverModelRelay()
+
+    record = relay.records["nemotron-parse-v12-evidence"]
+
+    assert record.lane == "taste_judge"
+    assert record.repo_id == "nvidia/NVIDIA-Nemotron-Parse-v1.2"
+    assert record.provider == "hf_nvidia"
+    assert record.params_b == 0.94
+    assert record.health == "healthy"
+
+
+def test_nemotron_nano_is_registered_as_fallback_for_parse() -> None:
+    relay = WeaverModelRelay()
+
+    parse_record = relay.records["nemotron-parse-v12-evidence"]
+    nano_record = relay.records["nemotron-nano-4b-gguf-evidence"]
+
+    assert "nemotron-nano-4b-gguf-evidence" in (parse_record.fallback_chain or ())
+    assert nano_record.repo_id == "nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF"
+    assert nano_record.lane == "taste_judge"
+    assert nano_record.params_b == 3.97
+
+
+def test_private_image_research_lane_is_rotatable() -> None:
+    from nexus_visual_weaver.model_relay import PINNED_LANES, ROTATABLE_LANES
+
+    assert "private_image_research" not in PINNED_LANES
+    assert "private_image_research" in ROTATABLE_LANES
+
+
+def test_flux2_klein_4b_is_pinned_with_apache_license() -> None:
+    relay = WeaverModelRelay()
+
+    record = relay.records["flux2-klein-4b-public"]
+
+    assert record.lane == "image_generation"
+    assert record.pinned is True
+    assert record.params_b == 4.0
+    assert record.license_gate == "apache-2.0"
+    assert record.repo_id == "black-forest-labs/FLUX.2-klein-4B"
+
+
+def test_flux2_klein_9b_is_not_pinned_and_in_private_research() -> None:
+    relay = WeaverModelRelay()
+
+    record = relay.records["flux2-klein-9b-private"]
+
+    assert record.lane == "private_image_research"
+    assert record.pinned is False
+    assert record.params_b == 9.0
+    assert record.license_gate == "review_required"
+
+
+def test_minicpm_has_fallback_chain_configured() -> None:
+    relay = WeaverModelRelay()
+
+    record = relay.records["minicpm-v46-visual-judge"]
+
+    assert record.fallback_chain is not None
+    assert len(record.fallback_chain) > 0
