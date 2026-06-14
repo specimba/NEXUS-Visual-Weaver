@@ -34,6 +34,24 @@ MODEL_CATALOG: list[ModelCandidate] = [
         source_url="https://hf.co/nvidia/LocateAnything-3B",
     ),
     ModelCandidate(
+        repo_id="openbmb/MiniCPM-V-4.6",
+        role="sponsor_visual_judge",
+        task="image-text-to-text",
+        params_b=1.30,
+        runtime="OpenAI-compatible API / transformers",
+        license="apache-2.0",
+        source_url="https://hf.co/openbmb/MiniCPM-V-4.6",
+    ),
+    ModelCandidate(
+        repo_id="nvidia/NVIDIA-Nemotron-Parse-v1.2",
+        role="sponsor_structured_parse",
+        task="image-text-to-text",
+        params_b=0.94,
+        runtime="provider API / transformers",
+        license="other",
+        source_url="https://hf.co/nvidia/NVIDIA-Nemotron-Parse-v1.2",
+    ),
+    ModelCandidate(
         repo_id="openbmb/MiniCPM5-1B",
         role="router",
         task="text-generation / tool-calling",
@@ -132,6 +150,8 @@ DEFAULT_ACTIVE_STACK = [
     "black-forest-labs/FLUX.2-klein-9B",
     "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
     "nvidia/LocateAnything-3B",
+    "openbmb/MiniCPM-V-4.6",
+    "nvidia/NVIDIA-Nemotron-Parse-v1.2",
     "openbmb/MiniCPM5-1B",
 ]
 
@@ -168,4 +188,3 @@ def catalog_summary(adult_mode: bool = False) -> dict[str, int | float | str]:
         "adult_catalog": "enabled" if adult_mode else "hidden",
         **budget,
     }
-

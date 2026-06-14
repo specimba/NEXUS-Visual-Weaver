@@ -27,7 +27,7 @@ def test_operator_actions_transition_checkpoint_export_and_stop() -> None:
         "Forge",
     )
     run = result[13]
-    operator_state = result[15]
+    operator_state = {**result[15], "generation": {**result[15]["generation"], "output_path": "outputs/test-generated-artifact.png"}}
     clean_scan = {"status": "pass", "export_gate": "clear", "findings": [], "purification_actions": []}
 
     approved = app.approve_checkpoint(run, False, clean_scan, "Forge", operator_state)
@@ -57,3 +57,20 @@ def test_export_blocks_without_checkpoint() -> None:
 
     assert blocked[13]["provider_state"] == "blocked"
     assert "checkpoint" in blocked[13]["message"].lower()
+
+
+def test_checkpoint_blocks_without_generated_artifact() -> None:
+    result = app.run_weave(
+        "gothic patent leather platform boots, crimson hardware",
+        "Strict",
+        "Wan2.2 I2V",
+        False,
+        None,
+        "Forge",
+    )
+    clean_scan = {"status": "pass", "export_gate": "clear", "findings": [], "purification_actions": []}
+
+    blocked = app.approve_checkpoint(result[13], False, clean_scan, "Forge", result[15])
+
+    assert blocked[13]["provider_state"] == "blocked"
+    assert "no generated artifact" in blocked[13]["message"].lower()

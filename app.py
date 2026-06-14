@@ -20,9 +20,11 @@ except Exception:  # pragma: no cover - local development does not require Space
     spaces = None
 
 from nexus_visual_weaver.catalog import catalog_summary
+from nexus_visual_weaver.exporter import write_export_packet
 from nexus_visual_weaver.hf_runtime import generate_flux_image
 from nexus_visual_weaver.model_relay import WeaverModelRelay
 from nexus_visual_weaver.planner import build_command_center_run
+from nexus_visual_weaver.provider_runtime import judge_with_minicpm, judge_with_nemotron
 from nexus_visual_weaver.render import render_catalog_table, render_command_header, render_dashboard_regions
 from nexus_visual_weaver.security import scan_file
 from nexus_visual_weaver.styles import APP_CSS
@@ -75,6 +77,24 @@ def _file_path(uploaded: Any) -> str | None:
     return str(path) if path else None
 
 
+def _checkpoint_seed(checkpoint_id: str) -> int:
+    suffix = "".join(char for char in checkpoint_id[-8:] if char in "0123456789abcdefABCDEF")
+    if not suffix:
+        return 0
+    try:
+        return int(suffix, 16) % 1_000_000
+    except ValueError:
+        return 0
+
+
+def _wardrobe_summary(run: Any) -> str:
+    slots = getattr(getattr(run, "outfit", None), "slots", []) or []
+    return "; ".join(
+        f"{slot.name}: {slot.description}, material={slot.material}, palette={slot.palette}, locked={slot.locked}"
+        for slot in slots
+    )
+
+
 SECTIONS = ["Forge", "Wardrobe", "Lore", "Models", "Security", "Runs"]
 
 
@@ -103,7 +123,7 @@ def run_weave(
     adult_mode: bool,
     upload: Any,
     active_section: str,
-) -> tuple[str, str, str, str, str, str, str, str, str, str, dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[Any, ...]:
     prompt = prompt.strip() or DEFAULT_PROMPT
     run = build_command_center_run(
         prompt=prompt,
@@ -111,19 +131,38 @@ def run_weave(
         video_preset=video_preset,
         adult_mode=adult_mode,
     )
-    scan = scan_file(_file_path(upload))
-    generation = generate_flux_image(run.refined_prompt.refined, seed=int(run.checkpoint.checkpoint_id[-6:], 16) % 1_000_000)
+    reference_scan = scan_file(_file_path(upload))
+    generation = generate_flux_image(run.refined_prompt.refined, seed=_checkpoint_seed(run.checkpoint.checkpoint_id))
+    generated_scan = scan_file(generation.output_path) if generation.output_path else reference_scan
+    minicpm = judge_with_minicpm(
+        prompt=run.refined_prompt.refined,
+        image_path=generation.output_path,
+        scan=generated_scan,
+        wardrobe_summary=_wardrobe_summary(run),
+    )
+    nemotron = judge_with_nemotron(
+        prompt=run.refined_prompt.refined,
+        run_packet=run.to_dict(),
+        minicpm_result=minicpm.to_dict(),
+    )
+    provider_state = generation.provider_state if generation.status in {"success", "error", "missing_runtime", "no_cuda"} else "checkpointed"
+    if generation.status == "success":
+        provider_state = "generated"
     operator_state = {
-        "provider_state": generation.provider_state if generation.status in {"success", "error", "missing_runtime", "no_cuda"} else "checkpointed",
+        "provider_state": provider_state,
         "checkpoint": "pending_review",
-        "export": scan.get("export_gate", "pending"),
+        "export": generated_scan.get("export_gate", "pending"),
         "message": generation.message or "Run packet generated. Human checkpoint required before provider promotion or export.",
         "generation": generation.to_dict(),
+        "reference_scan": reference_scan,
+        "generated_scan": generated_scan,
+        "minicpm_judge": minicpm.to_dict(),
+        "nemotron_evidence": nemotron.to_dict(),
     }
     regions = _dashboard_regions(
         run=run,
         adult_mode=adult_mode,
-        scan=scan,
+        scan=generated_scan,
         active_section=active_section,
         operator_state=operator_state,
     )
@@ -141,9 +180,9 @@ def run_weave(
         catalog,
         run.to_dict(),
         catalog_summary(adult_mode),
-        scan,
+        generated_scan,
         run,
-        scan,
+        generated_scan,
         operator_state,
         gr.update(interactive=True),
     )
@@ -153,7 +192,7 @@ def toggle_adult_visibility(
     adult_mode: bool,
     active_section: str,
     upload: Any,
-) -> tuple[str, str, str, str, str, str, str, dict[str, Any], dict[str, Any]]:
+) -> tuple[Any, ...]:
     scan = scan_file(_file_path(upload))
     operator_state = {
         **_default_operator_state(),
@@ -183,12 +222,10 @@ def refresh_section(
 ) -> tuple[str, str, str, str, str, dict[str, Any]]:
     """
     Updates dashboard regions for the selected navigation section.
-    
+
     Returns:
         A tuple containing HTML strings for command_rail, operations, inspector, artifacts, and providers regions, followed by the security scan results.
     """
-    scan = scan_file(_file_path(upload))
-    regions = _dashboard_regions(adult_mode=adult_mode, scan=scan, active_section=active_section)
     scan = scan or scan_file(None)
     regions = _dashboard_regions(
         run=run,
@@ -206,7 +243,7 @@ def _render_stateful(
     scan: dict[str, Any] | None,
     active_section: str,
     operator_state: dict[str, Any],
-) -> tuple[str, str, str, str, str, str, str, str, str, str, dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], Any]:
+) -> tuple[Any, ...]:
     scan = scan or scan_file(None)
     regions = _dashboard_regions(
         run=run,
@@ -232,11 +269,6 @@ def _render_stateful(
         operator_state,
         gr.update(interactive=run is not None and operator_state.get("provider_state") not in {"idle", "stopped", "exported"}),
     )
-    upload: Any,
-) -> tuple[str, str, str, str, str, dict[str, Any]]:
-    scan = scan_file(_file_path(upload))
-    regions = _dashboard_regions(adult_mode=adult_mode, scan=scan, active_section=active_section)
-    return regions["command_rail"], regions["operations"], regions["inspector"], regions["artifacts"], regions["providers"], scan
 
 
 def scan_reference(
@@ -245,10 +277,21 @@ def scan_reference(
     upload: Any,
     active_section: str,
     operator_state: dict[str, Any] | None,
-) -> tuple[str, str, str, str, str, str, str, str, str, str, dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], Any, dict[str, Any]]:
+) -> tuple[Any, ...]:
     scan = scan_file(_file_path(upload))
+    minicpm = None
+    if run is not None:
+        generated_path = ((operator_state or {}).get("generation") or {}).get("output_path")
+        minicpm = judge_with_minicpm(
+            prompt=getattr(getattr(run, "refined_prompt", None), "refined", DEFAULT_PROMPT),
+            image_path=generated_path or _file_path(upload),
+            scan=scan,
+            wardrobe_summary=_wardrobe_summary(run),
+        )
     next_state = {
         **(operator_state or _default_operator_state()),
+        **({"reference_judge": minicpm.to_dict()} if minicpm else {}),
+        "reference_scan": scan,
         "export": scan.get("export_gate", "pending"),
         "message": "Reference scan complete. Export gate is clear." if scan.get("export_gate") == "clear" else "Reference scan requires review before export.",
     }
@@ -262,10 +305,17 @@ def approve_checkpoint(
     scan: dict[str, Any] | None,
     active_section: str,
     operator_state: dict[str, Any] | None,
-) -> tuple[str, str, str, str, str, str, str, str, str, str, dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], Any]:
+) -> tuple[Any, ...]:
     scan = scan or scan_file(None)
     if run is None:
         next_state = {**_default_operator_state(), "provider_state": "blocked", "message": "No run exists yet. Run Active Weave first."}
+    elif not ((operator_state or {}).get("generation") or {}).get("output_path"):
+        next_state = {
+            **(operator_state or _default_operator_state()),
+            "provider_state": "blocked",
+            "checkpoint": "pending",
+            "message": "Checkpoint blocked: no generated artifact exists yet.",
+        }
     else:
         export_state = scan.get("export_gate", "pending")
         next_state = {
@@ -284,7 +334,7 @@ def export_packet(
     scan: dict[str, Any] | None,
     active_section: str,
     operator_state: dict[str, Any] | None,
-) -> tuple[str, str, str, str, str, str, str, str, str, str, dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], Any]:
+) -> tuple[Any, ...]:
     scan = scan or scan_file(None)
     state = operator_state or _default_operator_state()
     if run is None:
@@ -294,7 +344,14 @@ def export_packet(
     elif scan.get("export_gate") != "clear":
         next_state = {**state, "provider_state": "blocked", "export": scan.get("export_gate", "blocked"), "message": "Export blocked: ST3GG gate is not clear."}
     else:
-        next_state = {**state, "provider_state": "exported", "export": "clear", "message": "Governed export packet prepared with run, catalog, and ST3GG evidence."}
+        export = write_export_packet(run=run, scan=scan, operator_state=state, adult_mode=adult_mode)
+        next_state = {
+            **state,
+            "provider_state": "exported",
+            "export": "clear",
+            "export_packet": {"path": export["path"]},
+            "message": f"Governed export packet prepared: {export['path']}",
+        }
     return _render_stateful(run, adult_mode, scan, active_section, next_state)
 
 
@@ -304,7 +361,7 @@ def stop_provider_job(
     scan: dict[str, Any] | None,
     active_section: str,
     operator_state: dict[str, Any] | None,
-) -> tuple[str, str, str, str, str, str, str, str, str, str, dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], Any]:
+) -> tuple[Any, ...]:
     scan = scan or scan_file(None)
     next_state = {
         **(operator_state or _default_operator_state()),
@@ -317,7 +374,7 @@ def stop_provider_job(
 def reset_demo(
     adult_mode: bool,
     active_section: str,
-) -> tuple[str, str, str, str, str, str, str, str, str, str, dict[str, Any], dict[str, Any], dict[str, Any], None, dict[str, Any], dict[str, Any], Any]:
+) -> tuple[Any, ...]:
     scan = scan_file(None)
     operator_state = _default_operator_state()
     regions = _dashboard_regions(adult_mode=adult_mode, scan=scan, active_section=active_section, operator_state=operator_state)
@@ -444,42 +501,12 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
         fn=run_weave,
         inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav],
         outputs=stateful_outputs,
-        outputs=[
-            topbar_html,
-            command_rail_html,
-            workflow_html,
-            operations_html,
-            inspector_html,
-            drawer_html,
-            status_html,
-            artifact_html,
-            provider_html,
-            catalog_html,
-            run_json,
-            catalog_json,
-            scan_json,
-        ],
         api_name="run_active_weave",
     )
     prompt.submit(
         fn=run_weave,
         inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav],
         outputs=stateful_outputs,
-        outputs=[
-            topbar_html,
-            command_rail_html,
-            workflow_html,
-            operations_html,
-            inspector_html,
-            drawer_html,
-            status_html,
-            artifact_html,
-            provider_html,
-            catalog_html,
-            run_json,
-            catalog_json,
-            scan_json,
-        ],
         api_name=False,
     )
     adult_mode.change(
@@ -502,7 +529,6 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
     section_nav.change(
         fn=refresh_section,
         inputs=[section_nav, adult_mode, active_run_state, scan_state, operator_state],
-        inputs=[section_nav, adult_mode, upload],
         outputs=[command_rail_html, operations_html, inspector_html, artifact_html, provider_html, scan_json],
         api_name=False,
     )

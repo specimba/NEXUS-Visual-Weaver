@@ -53,7 +53,16 @@ def _space_runtime_status() -> dict[str, str]:
     space_id = os.environ.get("SPACE_ID") or os.environ.get("HF_SPACE_ID") or "local-preview"
     hardware = os.environ.get("SPACE_HARDWARE") or os.environ.get("NEXUS_SPACE_HARDWARE") or "ZeroGPU"
     bucket = "/data mounted" if os.path.isdir("/data") else "bucket optional"
-    secrets = "providers configured" if _env_configured("FAL_KEY", "NETLIFY_AUTH_TOKEN", "OPENAI_API_KEY", "MODAL_TOKEN_ID") else "no provider secrets"
+    configured = []
+    if _env_configured("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"):
+        configured.append("HF")
+    if _env_configured("MINICPM_API_KEY", "OPENBMB_API_KEY"):
+        configured.append("MiniCPM")
+    if _env_configured("NEMOTRON_API_KEY", "NVIDIA_API_KEY"):
+        configured.append("Nemotron")
+    if _env_configured("FAL_KEY", "NETLIFY_AUTH_TOKEN", "OPENAI_API_KEY", "MODAL_TOKEN_ID"):
+        configured.append("optional")
+    secrets = "configured: " + ", ".join(configured) if configured else "no provider secrets"
     return {
         "space_id": space_id,
         "hardware": hardware,
@@ -364,12 +373,6 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
         (outfit_label, "Wardrobe slots and locks", "checkpointed", "material-1", "02"),
         (locate_label, "LocateAnything region plan", "configured", "material-4", "03"),
         (video_label, "Checkpointed storyboard", "blocked" if scan.get("export_gate") == "blocked" or provider_state == "blocked" else "ready", "story-2", "04"),
-    checkpoint = getattr(run.checkpoint, "recommendation", "pending") if run else "pending"
-    artifacts = [
-        (prompt_label, "Taste-refined brief", "dry-run", "material-0", "01"),
-        (outfit_label, "Wardrobe slots and locks", "dry-run", "material-1", "02"),
-        (locate_label, "LocateAnything region plan", "dry-run", "material-4", "03"),
-        (video_label, "Checkpointed storyboard", "blocked" if scan.get("export_gate") == "blocked" else "ready", "story-2", "04"),
     ]
     cards = "".join(
         f"""
@@ -398,25 +401,18 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
             <small>PRIMARY OUTPUT STAGE / {escape(generated_status.upper() or "JUDGE-SAFE DEMO OUTPUT")} / SEED {escape(demo_seed)}</small>
             <strong>{'Real FLUX.2 Klein artifact' if generated_uri else 'Deterministic Raven Chronicle proof frame'}</strong>
             <span>{escape(generated_message or active_prompt)}</span>
-          <i class="nw-preview-image"></i>
-          <div class="nw-preview-caption">
-            <small>PRIMARY OUTPUT STAGE</small>
-            <strong>Generated artifact preview will land here</strong>
-            <span>{escape(active_prompt)}</span>
           </div>
         </div>
         <div class="nw-preview-meta">
           <div><small>checkpoint</small><strong>{escape(str(checkpoint).replace("_", " ").title())}</strong></div>
           <div><small>export gate</small><strong>{escape(export_gate)}</strong></div>
           <div><small>preview mode</small><strong>{escape(preview_mode)}</strong></div>
-          <div><small>preview mode</small><strong>Dry Run</strong></div>
         </div>
       </div>
       <div class="nw-preview-ribbon">
         <span>{icon("security")} ST3GG before export</span>
         <span>{icon("wardrobe")} continuity: {escape(continuity)}</span>
         <span>{icon("models")} provider call remains checkpointed; state: dry-run / configured / blocked / failed / exported; current: {escape(provider_state)}</span>
-        <span>{icon("models")} provider call remains checkpointed</span>
       </div>
       <div class="nw-artifact-grid">{cards}</div>
     </section>
@@ -450,9 +446,6 @@ def render_operations_panel(
     scan = scan or {"status": "idle", "export_gate": "pending", "findings": []}
     relay_status = relay_status or {}
     operator_state = operator_state or {}
-) -> str:
-    scan = scan or {"status": "idle", "export_gate": "pending", "findings": []}
-    relay_status = relay_status or {}
     section = active_section if active_section in {"Forge", "Wardrobe", "Lore", "Models", "Security", "Runs"} else "Forge"
     checkpoint = getattr(run, "checkpoint", None) if run else None
     outfit = getattr(run, "outfit", None) if run else None
@@ -598,6 +591,8 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
     relay_status = relay_status or {}
     decisions = relay_status.get("decisions", [])
     optional_statuses = {
+        "openbmb": "configured" if _env_configured("MINICPM_API_KEY", "OPENBMB_API_KEY") else "missing secret",
+        "nvidia": "configured" if _env_configured("NEMOTRON_API_KEY", "NVIDIA_API_KEY") else "missing secret",
         "fal": "configured" if _env_configured("FAL_KEY") else "blocked",
         "netlify": "configured" if _env_configured("NETLIFY_AUTH_TOKEN", "NETLIFY_SITE_ID", "OPENAI_BASE_URL") else "blocked",
         "cloudflare": "configured" if _env_configured("CLOUDFLARE_API_TOKEN", "CF_ACCOUNT_ID") else "blocked",
@@ -638,7 +633,7 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
               <strong>{escape(provider.title())}</strong>
               <span>off by default / secrets required</span>
               <i class="nw-provider-meter" style="--health:{'74' if state == 'configured' else '18'}"></i>
-              <div>{badge(state.upper(), "pass" if state == "configured" else "warn")}{badge("NOT MVP DEFAULT", "muted")}</div>
+              <div>{badge(state.upper(), "pass" if state == "configured" else "warn")}{badge("SPONSOR LANE" if provider in {"openbmb", "nvidia"} else "NOT MVP DEFAULT", "muted")}</div>
             </div>
             """
         )
@@ -662,7 +657,12 @@ def _scan_status_tone(scan_status: str) -> str:
     return "muted"
 
 
-def render_inspector(run: GenerationRun | None = None, scan: dict | None = None, relay_status: dict | None = None) -> str:
+def render_inspector(
+    run: GenerationRun | None = None,
+    scan: dict | None = None,
+    relay_status: dict | None = None,
+    operator_state: dict | None = None,
+) -> str:
     if run:
         checks = [
             ("Patent Leather", True),
@@ -684,6 +684,16 @@ def render_inspector(run: GenerationRun | None = None, scan: dict | None = None,
     checks_html = "".join(f'<li><span>{"✓" if ok else "!"}</span>{escape(label)}</li>' for label, ok in checks)
     relay = _render_relay_panel(relay_status)
     scan = scan or {"status": scan_status, "findings": [], "purification_actions": [], "export_gate": "pending"}
+    operator_state = operator_state or {}
+    minicpm = operator_state.get("minicpm_judge") or {}
+    nemotron = operator_state.get("nemotron_evidence") or {}
+    sponsor_rows = "".join(
+        f"<li><span>{escape(label)}</span><strong>{escape(str(result.get('status', 'pending')).upper())}</strong><em>{escape(str(result.get('repo_id', repo)))}</em></li>"
+        for label, repo, result in [
+            ("OpenBMB MiniCPM", "openbmb/MiniCPM-V-4.6", minicpm),
+            ("NVIDIA Nemotron", "nvidia/NVIDIA-Nemotron-Parse-v1.2", nemotron),
+        ]
+    )
     findings = scan.get("findings") or []
     actions = scan.get("purification_actions") or ["metadata strip ready", "IEND truncation ready", "LSB review ready"]
     finding_rows = "".join(f"<li>{escape(str(item))}</li>" for item in findings[:4]) or "<li>No upload selected. Scanner ready.</li>"
@@ -703,6 +713,8 @@ def render_inspector(run: GenerationRun | None = None, scan: dict | None = None,
       <ul class="nw-checks">{checks_html}</ul>
       <h3>Model Stack</h3>
       <ul class="nw-models">{model_rows}</ul>
+      <h3>Sponsor Evidence</h3>
+      <ul class="nw-relay">{sponsor_rows}</ul>
       <h3>ST3GG Scan</h3>
       <div class="nw-scan">
         <div>{badge(str(scan_status).upper(), _scan_status_tone(str(scan_status)))}<span>Always-on defensive review</span></div>
@@ -875,9 +887,9 @@ def render_dashboard_regions(
         "command_rail": render_command_rail(active_section),
         "workflow": render_workflow(run, operator_state),
         "operations": render_operations_panel(active_section, run, scan, relay_status, adult_mode=adult_mode, operator_state=operator_state),
-        "workflow": render_workflow(run),
-        "operations": render_operations_panel(active_section, run, scan, relay_status, adult_mode=adult_mode),
-        "inspector": render_inspector(run, scan, relay_status),
+        "workflow": render_workflow(run, operator_state),
+        "operations": render_operations_panel(active_section, run, scan, relay_status, adult_mode=adult_mode, operator_state=operator_state),
+        "inspector": render_inspector(run, scan, relay_status, operator_state),
         "drawer": render_drawer(run),
         "status": render_status_bar(operator_state),
         "artifacts": render_artifact_lane(run, scan, operator_state),
