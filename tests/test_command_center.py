@@ -2,8 +2,9 @@ from pathlib import Path
 
 from nexus_visual_weaver.catalog import active_stack, catalog_summary, filter_catalog, parameter_budget
 from nexus_visual_weaver.grounding import inspect_outfit
+from nexus_visual_weaver.model_relay import WeaverModelRelay
 from nexus_visual_weaver.planner import build_command_center_run
-from nexus_visual_weaver.render import render_dashboard_regions
+from nexus_visual_weaver.render import render_command_header, render_dashboard_regions, render_operations_panel
 from nexus_visual_weaver.security import scan_file
 from nexus_visual_weaver.taste import refine_prompt, score_prompt
 from nexus_visual_weaver.wardrobe import build_outfit_graph
@@ -78,12 +79,76 @@ def test_security_scan_flags_extension_magic_mismatch() -> None:
 
 def test_dashboard_regions_expose_artifacts_and_provider_cards() -> None:
     run = build_command_center_run("gothic couture archivist, patent leather, platform boots")
-    regions = render_dashboard_regions(run=run, adult_mode=False, scan=scan_file(None))
+    relay = WeaverModelRelay()
+    regions = render_dashboard_regions(
+        run=run,
+        adult_mode=False,
+        scan=scan_file(None),
+        relay_status=relay.dashboard_snapshot(public_demo=True),
+    )
 
     assert "Artifact Preview Lane" in regions["artifacts"]
+    assert "nw-preview-stage" in regions["artifacts"]
+    assert "nw-preview-ribbon" in regions["artifacts"]
+    assert "PRIMARY OUTPUT STAGE" in regions["artifacts"]
+    assert "Forge Operations" in regions["operations"]
     assert "Provider Handoff Cards" in regions["providers"]
+    assert "nw-provider-meter" in regions["providers"]
     assert "Selected: Forge" in regions["command_rail"]
     assert "ST3GG Scan" in regions["inspector"]
+    assert "nw-weave-console" in regions["workflow"]
+    assert "Hackathon Signal" in regions["workflow"]
+    assert "Boots / heels" in regions["drawer"]
+    assert "checkpointed" in regions["drawer"]
+
+
+def test_dashboard_regions_render_with_empty_relay_and_default_scan() -> None:
+    regions = render_dashboard_regions(relay_status={}, scan=None, active_section="Forge")
+
+    assert "Forge Operations" in regions["operations"]
+    assert "not-started" in regions["operations"]
+    assert "snapshot pending" in regions["providers"]
+    assert "Selected: Forge" in regions["command_rail"]
+    assert "provider call remains checkpointed" in regions["artifacts"]
+
+
+def test_dashboard_operations_follow_selected_section() -> None:
+    relay = WeaverModelRelay()
+    sections = {
+        "Wardrobe": "Footwear focus",
+        "Lore": "Beat budget",
+        "Models": "Rotation mode",
+        "Security": "ST3GG state",
+        "Runs": "Ledger mode",
+    }
+
+    for section, marker in sections.items():
+        regions = render_dashboard_regions(
+            adult_mode=(section == "Models"),
+            scan=scan_file(None),
+            relay_status=relay.dashboard_snapshot(public_demo=section != "Models"),
+            active_section=section,
+        )
+        assert f"{section} Operations" in regions["operations"]
+        assert marker in regions["operations"]
+        assert f"Selected: {section}" in regions["command_rail"]
+
+
+def test_security_operations_distinguish_clean_scan_from_idle() -> None:
+    clean_scan = {"status": "pass", "export_gate": "clear", "findings": []}
+    html = render_operations_panel(active_section="Security", scan=clean_scan)
+
+    assert "No findings." in html
+    assert "No upload selected." not in html
+
+
+def test_command_header_exposes_governed_run_controls() -> None:
+    header = render_command_header()
+
+    assert "Raven Chronicle Active Weave" in header
+    assert "ST3GG ALWAYS ON" in header
+    assert "FLUX.2 PINNED" in header
+    assert "HUMAN CHECKPOINT" in header
 
 
 def test_catalog_summary_reflects_adult_scope() -> None:

@@ -4,6 +4,24 @@ reviews:
   profile: assertive
   request_changes_workflow: true
   high_level_summary: true
+  high_level_summary_instructions: |
+    Summarize this PR as work on NEXUS Visual Weaver, a Hugging Face Build Small
+    Hackathon Gradio command-center for governed visual creation. Lead with
+    user-facing dashboard/workflow impact, then model-governance impact, then
+    security/export-gate impact, then verification evidence.
+
+    Preserve these project anchors in summaries when relevant:
+    - FLUX.2 is the pinned image-generation lane.
+    - NVIDIA LocateAnything-3B is the pinned grounding lane.
+    - ST3GG is the always-on security/export gate.
+    - Adult Mode must remain opt-in and must not disable provenance, consent,
+      age, export, dataset-partition, or ST3GG gates.
+    - ModelRelay/GMR helper rotation is quota-aware and only applies to helper
+      lanes, not pinned core lanes.
+
+    Avoid marketing filler, poems, exaggerated claims, or claims that provider
+    calls actually ran unless tests or logs prove it. Distinguish implemented
+    runtime behavior from dry-run preview surfaces and planning scaffolds.
   poem: false
   review_status: true
   collapse_walkthrough: false
@@ -20,4 +38,3 @@ reviews:
       instructions: "Prefer focused regression tests for workflow routing, ST3GG evidence, catalog filtering, and ModelRelay quota behavior."
 chat:
   auto_reply: true
-

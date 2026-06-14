@@ -33,6 +33,24 @@ def _metric(label: str, value: str, tone: str = "neutral") -> str:
     return f'<div class="nw-metric nw-metric-{tone}"><small>{escape(label)}</small><strong>{escape(value)}</strong></div>'
 
 
+def render_command_header() -> str:
+    return f"""
+    <section class="nw-command-header">
+      <div>
+        <small>COMMAND INPUT</small>
+        <strong>Raven Chronicle Active Weave</strong>
+        <span>Prompt, reference scan, model route, and checkpoint controls stay in one sticky operator strip.</span>
+      </div>
+      <div class="nw-command-pills">
+        {badge("SFW DEFAULT", "pass")}
+        {badge("ST3GG ALWAYS ON", "cyan")}
+        {badge("FLUX.2 PINNED", "accent")}
+        {badge("HUMAN CHECKPOINT", "warn")}
+      </div>
+    </section>
+    """
+
+
 def render_topbar(adult_mode: bool = False, relay_status: dict | None = None) -> str:
     summary = catalog_summary(adult_mode)
     active = float(summary["active_b"])
@@ -102,6 +120,12 @@ def render_command_rail(active_section: str = "Forge") -> str:
 def render_workflow(run: GenerationRun | None = None) -> str:
     workflow = WorkflowState.default()
     score = run.checkpoint.trust_score if run else 0.82
+    checkpoint_id = run.checkpoint.checkpoint_id if run else "nw-dry-run"
+    recommendation = run.checkpoint.recommendation.replace("_", " ").title() if run else "Awaiting Run"
+    required_actions = run.checkpoint.required_actions if run else ["Review candidate thumbnails before promotion"]
+    action_label = required_actions[0] if required_actions else "No action pending"
+    model_label = _short_repo(run.model_stack[0].repo_id) if run and run.model_stack else "FLUX.2"
+    locate_label = run.inspection.locate_model.split("/")[-1] if run else "LocateAnything-3B"
     nodes = {
         "seed": (35, 52, 190, 210, "Seed Prompt", ["Rogue archivist moving", "through rain-slick neon", "city, couture layers."], "Text-to-Image (FLUX.2)", "complete", "red"),
         "refine": (275, 52, 185, 160, "Refine", ["Prompt Refiner", "Style Harmonizer", "Negative Purge"], "Qwen2.5-7B", "complete", "violet"),
@@ -168,6 +192,28 @@ def render_workflow(run: GenerationRun | None = None) -> str:
       <div class="nw-legend">
         {badge("Text Flow", "accent")} {badge("Refine Loop", "violet")} {badge("Policy Gate", "blue")} {badge("Media Flow", "cyan")} {badge("Human Gate", "warn")}
       </div>
+      <div class="nw-weave-console">
+        <div class="nw-console-card nw-console-primary">
+          <small>Selected Node</small>
+          <strong>Human Checkpoint</strong>
+          <span>{escape(recommendation)} / {escape(checkpoint_id)}</span>
+        </div>
+        <div class="nw-console-card">
+          <small>Next Operator Action</small>
+          <strong>{escape(action_label)}</strong>
+          <span>Checkpoint blocks video promotion until reviewed.</span>
+        </div>
+        <div class="nw-console-card">
+          <small>Pinned Model Lanes</small>
+          <strong>{escape(model_label)} + {escape(locate_label)} + ST3GG</strong>
+          <span>Core lanes stay fixed; helper lanes may rotate.</span>
+        </div>
+        <div class="nw-console-card">
+          <small>Hackathon Signal</small>
+          <strong>Workflow, governance, visual creation</strong>
+          <span>Judge view keeps product purpose visible without a landing page.</span>
+        </div>
+      </div>
     </section>
     """
 
@@ -178,31 +224,135 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
     outfit_label = "Outfit map"
     locate_label = "Grounding overlay"
     video_label = run.video.preset if run else "Video path"
+    active_prompt = run.refined_prompt.refined[:150] if run else "Awaiting first weave. The preview stage shows dry-run handoff packets until provider output exists."
+    checkpoint = getattr(run.checkpoint, "recommendation", "pending") if run else "pending"
     artifacts = [
-        (prompt_label, "Taste-refined brief", "dry-run", "material-0"),
-        (outfit_label, "Wardrobe slots and locks", "dry-run", "material-1"),
-        (locate_label, "LocateAnything region plan", "dry-run", "material-4"),
-        (video_label, "Checkpointed storyboard", "blocked" if scan.get("export_gate") == "blocked" else "ready", "story-2"),
+        (prompt_label, "Taste-refined brief", "dry-run", "material-0", "01"),
+        (outfit_label, "Wardrobe slots and locks", "dry-run", "material-1", "02"),
+        (locate_label, "LocateAnything region plan", "dry-run", "material-4", "03"),
+        (video_label, "Checkpointed storyboard", "blocked" if scan.get("export_gate") == "blocked" else "ready", "story-2", "04"),
     ]
     cards = "".join(
         f"""
         <div class="nw-artifact-card">
+          <small>{escape(index)}</small>
           <i class="nw-{texture}"></i>
           <strong>{escape(title)}</strong>
           <span>{escape(body)}</span>
           {badge(status.upper(), "warn" if status == "blocked" else "muted")}
         </div>
         """
-        for title, body, status, texture in artifacts
+        for title, body, status, texture, index in artifacts
     )
     export_gate = str(scan.get("export_gate", "pending")).upper()
+    continuity = ", ".join(run.video.continuity_locks[:4]) if run else "outerwear, footwear, jewelry, NEXUS sigils"
     return f"""
     <section class="nw-panel nw-artifacts">
       <div class="nw-panel-head">
         <div><strong>Artifact Preview Lane</strong><small>Honest handoff packets until a provider call succeeds</small></div>
         {badge(f"Export {export_gate}", "warn" if export_gate == "BLOCKED" else "pass" if export_gate == "CLEAR" else "muted")}
       </div>
+      <div class="nw-preview-stage">
+        <div class="nw-preview-frame">
+          <i class="nw-preview-image"></i>
+          <div class="nw-preview-caption">
+            <small>PRIMARY OUTPUT STAGE</small>
+            <strong>Generated artifact preview will land here</strong>
+            <span>{escape(active_prompt)}</span>
+          </div>
+        </div>
+        <div class="nw-preview-meta">
+          <div><small>checkpoint</small><strong>{escape(str(checkpoint).replace("_", " ").title())}</strong></div>
+          <div><small>export gate</small><strong>{escape(export_gate)}</strong></div>
+          <div><small>preview mode</small><strong>Dry Run</strong></div>
+        </div>
+      </div>
+      <div class="nw-preview-ribbon">
+        <span>{icon("security")} ST3GG before export</span>
+        <span>{icon("wardrobe")} continuity: {escape(continuity)}</span>
+        <span>{icon("models")} provider call remains checkpointed</span>
+      </div>
       <div class="nw-artifact-grid">{cards}</div>
+    </section>
+    """
+
+
+def render_operations_panel(
+    active_section: str = "Forge",
+    run: GenerationRun | None = None,
+    scan: dict | None = None,
+    relay_status: dict | None = None,
+    *,
+    adult_mode: bool = False,
+) -> str:
+    scan = scan or {"status": "idle", "export_gate": "pending", "findings": []}
+    relay_status = relay_status or {}
+    section = active_section if active_section in {"Forge", "Wardrobe", "Lore", "Models", "Security", "Runs"} else "Forge"
+    checkpoint = getattr(run, "checkpoint", None) if run else None
+    outfit = getattr(run, "outfit", None) if run else None
+    lore = getattr(run, "lore", None) if run else None
+    run_id = getattr(checkpoint, "checkpoint_id", "not-started")
+    outfit_count = len(getattr(outfit, "slots", []) or [])
+    lore_count = len(getattr(lore, "beats", []) or [])
+    scan_status = str(scan.get("status", "idle")).upper()
+    export_gate = str(scan.get("export_gate", "pending")).upper()
+    decisions = relay_status.get("decisions", [])
+    first_decision = decisions[0] if decisions else {}
+    first_primary = (first_decision.get("primary") or {}) if first_decision else {}
+    adult_scope = "Private research scope" if adult_mode else "Public demo scope"
+    panels = {
+        "Forge": [
+            ("Prompt contract", "Taste-refined prompt, material locks, negative purge, and checkpoint requirements."),
+            ("Active run", f"{run_id} / checkpoint remains human-reviewed before video promotion."),
+            ("Provider posture", "Dry-run packets are visible before paid or gated calls."),
+        ],
+        "Wardrobe": [
+            ("Slot coverage", f"{outfit_count or 9} garment/accessory regions tracked with locks and edit priority."),
+            ("Footwear focus", "Platform boots, stilettos, high-heel boots, hardware, and silhouette constraints stay first-class."),
+            ("Locate map", "Reference regions feed preflight and post-generation outfit verification."),
+        ],
+        "Lore": [
+            ("Beat budget", f"{lore_count or 6} compact beats: identity, garment meaning, world context, emotion, motion."),
+            ("Video checkpoint", "Video presets remain handoff plans until human approval."),
+            ("Continuity locks", "Lore-to-video keeps garment meaning and motion cue visible without tab sprawl."),
+        ],
+        "Models": [
+            ("Primary helper", _short_repo(str(first_primary.get("repo_id", "pending")))),
+            ("Rotation mode", "Pinned core stays fixed; helper lanes rotate by license, budget, quota, and health."),
+            ("Scope", adult_scope),
+        ],
+        "Security": [
+            ("ST3GG state", f"{scan_status} / export {export_gate}"),
+            (
+                "Findings",
+                "; ".join(str(item) for item in (scan.get("findings") or [])[:2])
+                or ("No findings." if scan_status != "IDLE" else "No upload selected."),
+            ),
+            ("Public export", "Consent, provenance, metadata, age, dataset, and payload gates stay active."),
+        ],
+        "Runs": [
+            ("Current checkpoint", run_id),
+            ("Ledger mode", "Run JSON, catalog summary, and ST3GG evidence remain in the evidence accordion."),
+            ("Rollback path", "Feature branches and draft PRs carry implementation checkpoints."),
+        ],
+    }
+    rows = "".join(
+        f"""
+        <div class="nw-operation-card">
+          <small>{escape(title)}</small>
+          <strong>{escape(body)}</strong>
+          <i></i>
+        </div>
+        """
+        for title, body in panels[section]
+    )
+    return f"""
+    <section class="nw-panel nw-operations">
+      <div class="nw-panel-head">
+        <div><strong>{escape(section)} Operations</strong><small>Section-aware control surface for the selected command rail lane</small></div>
+        {badge(f"{escape(section).upper()} ACTIVE", "cyan")}
+      </div>
+      <div class="nw-operation-grid">{rows}</div>
     </section>
     """
 
@@ -275,6 +425,7 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
               <small>{escape(lane)}</small>
               <strong>{escape(repo)}</strong>
               <span>{escape(str(provider))} / {escape(str(gate))}</span>
+              <i class="nw-provider-meter" style="--health:{'86' if status == 'ready' else '52' if status == 'limited' else '22'}"></i>
               <div>{badge(str(status).upper(), tone)}{badge("DRY-RUN", "muted")}</div>
             </div>
             """
@@ -364,36 +515,37 @@ def render_drawer(run: GenerationRun | None = None) -> str:
         beats = []
     slot_cards = "".join(
         f"""
-        <div class="nw-swatch">
+        <div class="nw-swatch {'is-locked' if slot.locked else ''}">
           <i class="nw-material-{idx % 6}"></i><strong>{escape(slot.name.replace("_", " ").title())}</strong>
           <small>{escape(slot.material.replace("_", " "))}</small>
+          <span>{'locked' if slot.locked else 'editable'} / p{slot.edit_priority}</span>
         </div>
         """
         for idx, slot in enumerate(slots[:8])
     )
     if not slot_cards:
         slot_cards = "".join(
-            f'<div class="nw-swatch"><i class="nw-material-{idx % 6}"></i><strong>{label}</strong><small>{mat}</small></div>'
+            f'<div class="nw-swatch"><i class="nw-material-{idx % 6}"></i><strong>{label}</strong><small>{mat}</small><span>editable / p{5 - idx // 2}</span></div>'
             for idx, (label, mat) in enumerate([
                 ("Patent Leather", "jet black"), ("Faux Fur", "ash gray"), ("Lace Mesh", "noir"),
                 ("Crimson Hardware", "polished"), ("Platform Boots", "matte black"), ("Long Coat", "wool blend"),
             ])
         )
     beat_cards = "".join(
-        f'<div class="nw-beat"><i class="nw-story-{idx % 6}"></i><strong>{escape(beat["id"])} {escape(beat["title"])}</strong><small>{escape(beat["cue"][:80])}</small><span class="nw-mini-chip">FLUX.2</span></div>'
+        f'<div class="nw-beat"><i class="nw-story-{idx % 6}"></i><strong>{escape(beat["id"])} {escape(beat["title"])}</strong><small>{escape(beat["cue"][:80])}</small><span class="nw-mini-chip">checkpointed</span></div>'
         for idx, beat in enumerate(beats[:6])
     )
     if not beat_cards:
-        beat_cards = "".join(f'<div class="nw-beat"><i class="nw-story-{i % 6}"></i><strong>0{i} Beat</strong><small>Scene continuity cue</small><span class="nw-mini-chip">FLUX.2</span></div>' for i in range(1, 7))
+        beat_cards = "".join(f'<div class="nw-beat"><i class="nw-story-{i % 6}"></i><strong>0{i} Beat</strong><small>Scene continuity cue</small><span class="nw-mini-chip">checkpointed</span></div>' for i in range(1, 7))
     return f"""
     <section class="nw-bottom">
       <div class="nw-panel nw-wardrobe">
-        <div class="nw-panel-head"><strong>Outfit Wardrobe</strong><span class="nw-chip">All Categories</span></div>
-        <div class="nw-filter-row"><span>All</span><span>Materials</span><span>Hardware</span><span>Footwear</span><span>Layers</span><span>Textures</span></div>
+        <div class="nw-panel-head"><div><strong>Outfit Wardrobe</strong><small>Couture slots, locks, LocateAnything regions, and edit priority</small></div><span class="nw-chip">All Categories</span></div>
+        <div class="nw-filter-row"><span>All</span><span>Patent</span><span>Lace</span><span>Hardware</span><span>Boots / heels</span><span>Outerwear</span><span>Props</span></div>
         <div class="nw-swatches">{slot_cards}</div>
       </div>
       <div class="nw-panel nw-lore">
-        <div class="nw-panel-head"><strong>Lore-to-Video Timeline</strong><div class="nw-tools nw-static-tools"><span>6 Beats</span><span>24 FPS</span></div></div>
+        <div class="nw-panel-head"><div><strong>Lore-to-Video Timeline</strong><small>Identity, garment meaning, motion cue, and video checkpoint path</small></div><div class="nw-tools nw-static-tools"><span>6 Beats</span><span>24 FPS</span></div></div>
         <div class="nw-beats">{beat_cards}</div>
       </div>
     </section>
@@ -451,6 +603,7 @@ def render_dashboard(
         {regions["rail"]}
         <div class="nw-main-stack">
           {regions["workflow"]}
+          {regions["operations"]}
           {regions["artifacts"]}
         </div>
         <div class="nw-side-stack">
@@ -476,6 +629,7 @@ def render_dashboard_regions(
         "rail": render_left_rail(active_section),
         "command_rail": render_command_rail(active_section),
         "workflow": render_workflow(run),
+        "operations": render_operations_panel(active_section, run, scan, relay_status, adult_mode=adult_mode),
         "inspector": render_inspector(run, scan, relay_status),
         "drawer": render_drawer(run),
         "status": render_status_bar(),
