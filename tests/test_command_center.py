@@ -91,6 +91,13 @@ def test_dashboard_regions_expose_artifacts_and_provider_cards() -> None:
     assert "nw-preview-stage" in regions["artifacts"]
     assert "nw-preview-ribbon" in regions["artifacts"]
     assert "PRIMARY OUTPUT STAGE" in regions["artifacts"]
+    assert "JUDGE-SAFE DEMO OUTPUT" in regions["artifacts"]
+    assert "state: dry-run / configured / blocked / failed" in regions["artifacts"]
+    assert "Forge Operations" in regions["operations"]
+    assert "Provider Handoff Cards" in regions["providers"]
+    assert "nw-provider-meter" in regions["providers"]
+    assert "optional gateway" in regions["providers"]
+    assert "CHECKPOINTED" in regions["providers"]
     assert "Forge Operations" in regions["operations"]
     assert "Provider Handoff Cards" in regions["providers"]
     assert "nw-provider-meter" in regions["providers"]
@@ -113,6 +120,11 @@ def test_dashboard_regions_render_with_empty_relay_and_default_scan() -> None:
 
 
 def test_dashboard_operations_follow_selected_section() -> None:
+    """
+    Verify that dashboard operations and command rail update consistently across different active sections.
+    
+    Asserts that the operations panel displays the active section name and its corresponding marker, while the command rail correctly reflects the selected section.
+    """
     relay = WeaverModelRelay()
     sections = {
         "Wardrobe": "Footwear focus",
@@ -135,6 +147,12 @@ def test_dashboard_operations_follow_selected_section() -> None:
 
 
 def test_security_operations_distinguish_clean_scan_from_idle() -> None:
+    """
+    Validate that the Security operations panel distinguishes a clean scan from an unselected state.
+    
+    When provided a clean scan (status "pass", no findings), the panel displays "No findings."
+    but does not display "No upload selected." (the idle-state message).
+    """
     clean_scan = {"status": "pass", "export_gate": "clear", "findings": []}
     html = render_operations_panel(active_section="Security", scan=clean_scan)
 
@@ -149,6 +167,17 @@ def test_command_header_exposes_governed_run_controls() -> None:
     assert "ST3GG ALWAYS ON" in header
     assert "FLUX.2 PINNED" in header
     assert "HUMAN CHECKPOINT" in header
+
+
+def test_dashboard_surfaces_hf_space_status_without_secrets(monkeypatch) -> None:
+    for name in ["FAL_KEY", "NETLIFY_AUTH_TOKEN", "NETLIFY_SITE_ID", "OPENAI_BASE_URL", "OPENAI_API_KEY", "MODAL_TOKEN_ID"]:
+        monkeypatch.delenv(name, raising=False)
+
+    regions = render_dashboard_regions(relay_status=WeaverModelRelay().dashboard_snapshot(public_demo=True))
+
+    assert "ZeroGPU" in regions["topbar"]
+    assert "no provider secrets" in regions["topbar"]
+    assert "HF Space" in regions["status"]
 
 
 def test_catalog_summary_reflects_adult_scope() -> None:

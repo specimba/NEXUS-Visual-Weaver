@@ -117,3 +117,14 @@ def test_dashboard_surfaces_gmr_pinned_models_and_fallbacks() -> None:
     assert "LocateAnything pinned" in html
     assert "fallback:" in html
     assert "Rotation Safe" in html
+
+
+def test_optional_external_gateways_are_registered_but_excluded_by_default() -> None:
+    relay = WeaverModelRelay()
+
+    assert relay.records["netlify-ai-gateway-helper"].provider == "netlify"
+    assert relay.records["cloudflare-agent-helper"].provider == "cloudflare"
+    assert relay.records["fal-media-adapter"].provider == "fal"
+    assert relay.records["netflix-void-modal"].health == "healthy"
+    assert relay.records["netlify-ai-gateway-helper"].health == "excluded"
+    assert relay.records["fal-media-adapter"].health == "excluded"

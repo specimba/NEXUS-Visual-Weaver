@@ -1,3 +1,24 @@
+---
+title: NEXUS Visual Weaver
+emoji: 🧵
+colorFrom: red
+colorTo: gray
+sdk: gradio
+sdk_version: 6.12.0
+app_file: app.py
+pinned: false
+license: apache-2.0
+short_description: Governed gothic couture visual creation command center
+models:
+  - black-forest-labs/FLUX.2-klein-9B
+  - nvidia/LocateAnything-3B
+tags:
+  - gradio
+  - mcp-server
+  - visual-creation
+  - hackathon
+---
+
 # NEXUS Visual Weaver
 
 Dark creative-operations command center for the Hugging Face Build Small Hackathon.
@@ -85,4 +106,3 @@ See [docs/RELEASE_WORKFLOW.md](docs/RELEASE_WORKFLOW.md) for the push and review
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
-
