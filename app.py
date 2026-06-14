@@ -282,12 +282,13 @@ def scan_reference(
     minicpm = None
     if run is not None:
         generated_path = ((operator_state or {}).get("generation") or {}).get("output_path")
-        minicpm = judge_with_minicpm(
-            prompt=getattr(getattr(run, "refined_prompt", None), "refined", DEFAULT_PROMPT),
-            image_path=generated_path or _file_path(upload),
-            scan=scan,
-            wardrobe_summary=_wardrobe_summary(run),
-        )
+        if generated_path:
+            minicpm = judge_with_minicpm(
+                prompt=getattr(getattr(run, "refined_prompt", None), "refined", DEFAULT_PROMPT),
+                image_path=generated_path,
+                scan=scan,
+                wardrobe_summary=_wardrobe_summary(run),
+            )
     next_state = {
         **(operator_state or _default_operator_state()),
         **({"reference_judge": minicpm.to_dict()} if minicpm else {}),

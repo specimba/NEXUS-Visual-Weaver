@@ -55,9 +55,9 @@ def _space_runtime_status() -> dict[str, str]:
     configured = []
     if _env_configured("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"):
         configured.append("HF")
-    if _env_configured("MINICPM_API_KEY", "OPENBMB_API_KEY"):
+    if _env_configured("MINICPM_API_KEY", "OPENBMB_API_KEY", "MINICPM_BASE_URL"):
         configured.append("MiniCPM")
-    if _env_configured("NEMOTRON_API_KEY", "NVIDIA_API_KEY"):
+    if _env_configured("NEMOTRON_API_KEY", "NVIDIA_API_KEY", "NEMOTRON_BASE_URL"):
         configured.append("Nemotron")
     if _env_configured("FAL_KEY", "NETLIFY_AUTH_TOKEN", "OPENAI_API_KEY", "MODAL_TOKEN_ID"):
         configured.append("optional")
@@ -563,8 +563,8 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
     relay_status = relay_status or {}
     decisions = relay_status.get("decisions", [])
     optional_statuses = {
-        "openbmb": "configured" if _env_configured("MINICPM_API_KEY", "OPENBMB_API_KEY") else "missing secret",
-        "nvidia": "configured" if _env_configured("NEMOTRON_API_KEY", "NVIDIA_API_KEY") else "missing secret",
+        "openbmb": "configured" if _env_configured("MINICPM_API_KEY", "OPENBMB_API_KEY", "MINICPM_BASE_URL") else "missing secret",
+        "nvidia": "configured" if _env_configured("NEMOTRON_API_KEY", "NVIDIA_API_KEY", "NEMOTRON_BASE_URL") else "missing secret",
         "fal": "configured" if _env_configured("FAL_KEY") else "blocked",
         "netlify": "configured" if _env_configured("NETLIFY_AUTH_TOKEN", "NETLIFY_SITE_ID", "OPENAI_BASE_URL") else "blocked",
         "cloudflare": "configured" if _env_configured("CLOUDFLARE_API_TOKEN", "CF_ACCOUNT_ID") else "blocked",

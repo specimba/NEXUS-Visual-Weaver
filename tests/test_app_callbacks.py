@@ -100,6 +100,8 @@ def test_run_weave_returns_stateful_dashboard_packet() -> None:
 
 
 def test_operator_actions_transition_checkpoint_export_and_stop() -> None:
+    from pathlib import Path
+
     result = app.run_weave(
         "gothic patent leather platform boots, crimson hardware",
         "Strict",
@@ -109,7 +111,10 @@ def test_operator_actions_transition_checkpoint_export_and_stop() -> None:
         "Forge",
     )
     run = result[13]
-    operator_state = {**result[15], "generation": {**result[15]["generation"], "output_path": "outputs/test-generated-artifact.png"}}
+    artifact_path = Path("outputs/test-generated-artifact.png")
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+    operator_state = {**result[15], "generation": {**result[15]["generation"], "output_path": str(artifact_path)}}
     clean_scan = {"status": "pass", "export_gate": "clear", "findings": [], "purification_actions": []}
 
     approved = app.approve_checkpoint(run, False, clean_scan, "Forge", operator_state)

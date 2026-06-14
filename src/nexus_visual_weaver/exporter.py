@@ -18,8 +18,6 @@ def export_root() -> Path:
         candidates.append(Path("/data/nexus_visual_weaver/exports"))
     candidates.append(Path("outputs/exports"))
     for candidate in candidates:
-        if candidate is None:
-            continue
         try:
             candidate.mkdir(parents=True, exist_ok=True)
             return candidate

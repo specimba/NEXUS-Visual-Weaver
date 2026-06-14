@@ -92,8 +92,8 @@ Public demo mode excludes private, commercial-uncleared, and research-only helpe
 | <=32B models | Public stack is 11.42B: FLUX.2 Klein 4B + LocateAnything 3.83B + MiniCPM-V 1.30B + Nemotron Parse 0.94B + MiniCPM5 1.08B + FunctionGemma 0.27B. |
 | Off Brand | Custom command-center UI, dense inspector, workflow graph, wardrobe/lore drawer, and provider cards. |
 | Best Agent | Multi-step prompt, generation, scan, judge, checkpoint, export workflow. |
-| OpenBMB | Claimed only when MiniCPM-V returns judge evidence in an export packet. |
-| NVIDIA | Claimed only when Nemotron returns evidence in an export packet. LocateAnything remains visible but is not the Nemotron claim by itself. |
+| OpenBMB | Claimed only when MiniCPM-V returns success status in an export packet. |
+| NVIDIA | Claimed only when Nemotron returns success status in an export packet. LocateAnything remains visible but is not the Nemotron claim by itself. |
 | OpenAI Codex | Development branch and PR include Codex-authored implementation commits. |
 | Demo / social | Add final links here before submission: `DEMO_VIDEO_URL` and `SOCIAL_POST_URL`. |
 
@@ -112,6 +112,7 @@ The app reads `NEXUS_PORT` or `PORT` when present, otherwise it launches on `786
 
 ```powershell
 python -m compileall app.py src tests
+$env:NEXUS_DISABLE_REAL_HF='1'
 $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
 python -m pytest -q tests -p no:cacheprovider --basetemp=C:\tmp\pytest-nvw-full
 ```

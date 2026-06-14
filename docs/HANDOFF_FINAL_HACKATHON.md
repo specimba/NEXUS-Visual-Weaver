@@ -26,8 +26,8 @@ Do not paste these into chat, commits, logs, or export packets.
 
 ```powershell
 python -m compileall app.py src tests
-python -c "import app; print('app import ok')"
 $env:NEXUS_DISABLE_REAL_HF='1'
+python -c "import app; print('app import ok')"
 $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
 python -m pytest -q tests -p no:cacheprovider
 hf auth whoami --format json

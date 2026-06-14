@@ -7,6 +7,7 @@ import json
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -66,6 +67,9 @@ def _post_json(url: str, token: str, payload: dict[str, Any], timeout: float) ->
         },
         method="POST",
     )
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError(f"Invalid URL scheme: {parsed.scheme}. Only http and https are allowed.")
     with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - URL comes from Space secret/config.
         return json.loads(response.read().decode("utf-8", errors="replace"))
 
