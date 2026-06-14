@@ -38,7 +38,7 @@ footer { display: none !important; }
 .nw-topbar {
   min-height: 64px;
   display: grid;
-  grid-template-columns: 242px 148px 174px minmax(220px, 1fr) 145px 162px 146px 210px;
+  grid-template-columns: 220px 138px 164px minmax(200px, 1fr) 132px 150px 178px 138px 190px;
   gap: 0;
   align-items: stretch;
   border-bottom: 1px solid #171c22;
@@ -84,6 +84,7 @@ footer { display: none !important; }
   right: 18px;
 }
 .nw-gmr { gap: 5px; }
+.nw-space strong { color: var(--nw-cyan); }
 .nw-meter { height: 8px; background: #20262d; border-radius: 8px; overflow: hidden; margin-top: 5px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.05); }
 .nw-meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--nw-red), #ff6b7f); box-shadow: 0 0 16px rgba(255,54,95,.34); }
 .nw-live-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--nw-green); box-shadow: 0 0 12px rgba(38,215,130,.7); margin-right: 7px; vertical-align: -1px; }
@@ -811,7 +812,7 @@ footer { display: none !important; }
   height: 54px;
   margin: 8px;
   display: grid !important;
-  grid-template-columns: 120px 140px 220px 260px 220px 1fr 160px;
+  grid-template-columns: 110px 120px 160px 200px 140px 150px 1fr 160px;
   align-items: stretch;
   border: 1px solid var(--nw-line);
   border-radius: 7px;

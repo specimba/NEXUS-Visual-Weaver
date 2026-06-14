@@ -91,9 +91,13 @@ def test_dashboard_regions_expose_artifacts_and_provider_cards() -> None:
     assert "nw-preview-stage" in regions["artifacts"]
     assert "nw-preview-ribbon" in regions["artifacts"]
     assert "PRIMARY OUTPUT STAGE" in regions["artifacts"]
+    assert "JUDGE-SAFE DEMO OUTPUT" in regions["artifacts"]
+    assert "state: dry-run / configured / blocked / failed" in regions["artifacts"]
     assert "Forge Operations" in regions["operations"]
     assert "Provider Handoff Cards" in regions["providers"]
     assert "nw-provider-meter" in regions["providers"]
+    assert "optional gateway" in regions["providers"]
+    assert "CHECKPOINTED" in regions["providers"]
     assert "Selected: Forge" in regions["command_rail"]
     assert "ST3GG Scan" in regions["inspector"]
     assert "nw-weave-console" in regions["workflow"]
@@ -149,6 +153,17 @@ def test_command_header_exposes_governed_run_controls() -> None:
     assert "ST3GG ALWAYS ON" in header
     assert "FLUX.2 PINNED" in header
     assert "HUMAN CHECKPOINT" in header
+
+
+def test_dashboard_surfaces_hf_space_status_without_secrets(monkeypatch) -> None:
+    for name in ["FAL_KEY", "NETLIFY_AUTH_TOKEN", "NETLIFY_SITE_ID", "OPENAI_BASE_URL", "OPENAI_API_KEY", "MODAL_TOKEN_ID"]:
+        monkeypatch.delenv(name, raising=False)
+
+    regions = render_dashboard_regions(relay_status=WeaverModelRelay().dashboard_snapshot(public_demo=True))
+
+    assert "ZeroGPU" in regions["topbar"]
+    assert "no provider secrets" in regions["topbar"]
+    assert "HF Space" in regions["status"]
 
 
 def test_catalog_summary_reflects_adult_scope() -> None:

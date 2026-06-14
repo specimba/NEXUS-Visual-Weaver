@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from html import escape
 
 from .catalog import catalog_summary, parameter_budget
@@ -33,6 +34,23 @@ def _metric(label: str, value: str, tone: str = "neutral") -> str:
     return f'<div class="nw-metric nw-metric-{tone}"><small>{escape(label)}</small><strong>{escape(value)}</strong></div>'
 
 
+def _env_configured(*names: str) -> bool:
+    return any(bool(os.environ.get(name)) for name in names)
+
+
+def _space_runtime_status() -> dict[str, str]:
+    space_id = os.environ.get("SPACE_ID") or os.environ.get("HF_SPACE_ID") or "local-preview"
+    hardware = os.environ.get("SPACE_HARDWARE") or os.environ.get("NEXUS_SPACE_HARDWARE") or "ZeroGPU"
+    bucket = "/data mounted" if os.path.isdir("/data") else "bucket optional"
+    secrets = "providers configured" if _env_configured("FAL_KEY", "NETLIFY_AUTH_TOKEN", "OPENAI_API_KEY", "MODAL_TOKEN_ID") else "no provider secrets"
+    return {
+        "space_id": space_id,
+        "hardware": hardware,
+        "bucket": bucket,
+        "secrets": secrets,
+    }
+
+
 def render_command_header() -> str:
     return f"""
     <section class="nw-command-header">
@@ -60,6 +78,7 @@ def render_topbar(adult_mode: bool = False, relay_status: dict | None = None) ->
     rotation_safe = bool(relay_status.get("rotation_safe", True))
     relay_label = "Rotation Safe" if rotation_safe else "Rotation Limited"
     relay_tone = "pass" if rotation_safe else "warn"
+    space = _space_runtime_status()
     return f"""
     <div class="nw-topbar">
       <div class="nw-brand"><span>NEXUS</span><strong>Visual Weaver</strong></div>
@@ -71,6 +90,7 @@ def render_topbar(adult_mode: bool = False, relay_status: dict | None = None) ->
       </div>
       <div class="nw-status"><span class="nw-live-dot"></span><strong>HF Connected</strong><small>Hugging Face</small></div>
       <div class="nw-status nw-gmr"><small>HF / Modal / GMR</small>{badge(relay_label, relay_tone)}<small>Helper rotation only</small></div>
+      <div class="nw-status nw-space"><small>{escape(space["space_id"])}</small><strong>{escape(space["hardware"])}</strong><small>{escape(space["bucket"])} / {escape(space["secrets"])}</small></div>
       <div class="nw-adult">
         <strong>Adult Mode {icon("lock")}</strong>
         <span class="nw-toggle {'is-on' if adult_mode else ''}"><i></i>{escape(adult_label)}</span>
@@ -226,10 +246,11 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
     video_label = run.video.preset if run else "Video path"
     active_prompt = run.refined_prompt.refined[:150] if run else "Awaiting first weave. The preview stage shows dry-run handoff packets until provider output exists."
     checkpoint = getattr(run.checkpoint, "recommendation", "pending") if run else "pending"
+    demo_seed = (run.checkpoint.checkpoint_id[-4:] if run else "0000").upper()
     artifacts = [
         (prompt_label, "Taste-refined brief", "dry-run", "material-0", "01"),
-        (outfit_label, "Wardrobe slots and locks", "dry-run", "material-1", "02"),
-        (locate_label, "LocateAnything region plan", "dry-run", "material-4", "03"),
+        (outfit_label, "Wardrobe slots and locks", "checkpointed", "material-1", "02"),
+        (locate_label, "LocateAnything region plan", "configured", "material-4", "03"),
         (video_label, "Checkpointed storyboard", "blocked" if scan.get("export_gate") == "blocked" else "ready", "story-2", "04"),
     ]
     cards = "".join(
@@ -256,8 +277,8 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
         <div class="nw-preview-frame">
           <i class="nw-preview-image"></i>
           <div class="nw-preview-caption">
-            <small>PRIMARY OUTPUT STAGE</small>
-            <strong>Generated artifact preview will land here</strong>
+            <small>PRIMARY OUTPUT STAGE / JUDGE-SAFE DEMO OUTPUT / SEED {escape(demo_seed)}</small>
+            <strong>Deterministic Raven Chronicle proof frame</strong>
             <span>{escape(active_prompt)}</span>
           </div>
         </div>
@@ -270,7 +291,7 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
       <div class="nw-preview-ribbon">
         <span>{icon("security")} ST3GG before export</span>
         <span>{icon("wardrobe")} continuity: {escape(continuity)}</span>
-        <span>{icon("models")} provider call remains checkpointed</span>
+        <span>{icon("models")} provider call remains checkpointed; state: dry-run / configured / blocked / failed</span>
       </div>
       <div class="nw-artifact-grid">{cards}</div>
     </section>
@@ -409,6 +430,11 @@ def _render_relay_panel(relay_status: dict | None = None) -> str:
 def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = False) -> str:
     relay_status = relay_status or {}
     decisions = relay_status.get("decisions", [])
+    optional_statuses = {
+        "fal": "configured" if _env_configured("FAL_KEY") else "blocked",
+        "netlify": "configured" if _env_configured("NETLIFY_AUTH_TOKEN", "NETLIFY_SITE_ID", "OPENAI_BASE_URL") else "blocked",
+        "cloudflare": "configured" if _env_configured("CLOUDFLARE_API_TOKEN", "CF_ACCOUNT_ID") else "blocked",
+    }
     cards = []
     for decision in decisions[:5]:
         primary = decision.get("primary") or {}
@@ -417,7 +443,10 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
         repo = _short_repo(primary.get("repo_id", "blocked"))
         lane = decision.get("lane", "helper").replace("_", " ")
         status = quota.get("status", "blocked")
-        tone = "pass" if status == "ready" else "warn" if status in {"limited", "blocked"} else "muted"
+        provider_state = "dry-run" if status == "ready" else "blocked" if status == "blocked" else "limited"
+        if provider in optional_statuses:
+            provider_state = optional_statuses[provider]
+        tone = "pass" if provider_state == "configured" else "warn" if provider_state in {"limited", "blocked", "failed"} else "muted"
         gate = primary.get("license_gate", "unknown")
         cards.append(
             f"""
@@ -425,13 +454,25 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
               <small>{escape(lane)}</small>
               <strong>{escape(repo)}</strong>
               <span>{escape(str(provider))} / {escape(str(gate))}</span>
-              <i class="nw-provider-meter" style="--health:{'86' if status == 'ready' else '52' if status == 'limited' else '22'}"></i>
-              <div>{badge(str(status).upper(), tone)}{badge("DRY-RUN", "muted")}</div>
+              <i class="nw-provider-meter" style="--health:{'86' if provider_state in {'configured', 'dry-run'} else '52' if provider_state == 'limited' else '22'}"></i>
+              <div>{badge(provider_state.upper(), tone)}{badge("CHECKPOINTED", "muted")}</div>
             </div>
             """
         )
     if not cards:
         cards.append('<div class="nw-provider-card"><small>providers</small><strong>snapshot pending</strong><span>relay idle</span><div>{}</div></div>'.format(badge("DRY-RUN", "muted")))
+    for provider, state in optional_statuses.items():
+        cards.append(
+            f"""
+            <div class="nw-provider-card nw-provider-optional">
+              <small>optional gateway</small>
+              <strong>{escape(provider.title())}</strong>
+              <span>off by default / secrets required</span>
+              <i class="nw-provider-meter" style="--health:{'74' if state == 'configured' else '18'}"></i>
+              <div>{badge(state.upper(), "pass" if state == "configured" else "warn")}{badge("NOT MVP DEFAULT", "muted")}</div>
+            </div>
+            """
+        )
     mode_label = "private research" if adult_mode else "public demo safe"
     return f"""
     <section class="nw-panel nw-providers">
@@ -553,6 +594,7 @@ def render_drawer(run: GenerationRun | None = None) -> str:
 
 
 def render_status_bar() -> str:
+    space = _space_runtime_status()
     return f"""
     <footer class="nw-statusbar">
       {_metric("Runs", "112")}
@@ -560,6 +602,7 @@ def render_status_bar() -> str:
       {_metric("GPU", "46%", "bar")}
       {_metric("VRAM", "18.2 / 40 GB", "bar")}
       {_metric("Temp", "62 C")}
+      {_metric("HF Space", space["hardware"])}
       <div class="nw-autosave"><span class="nw-live-dot"></span><strong>Auto-save</strong><small>On</small></div>
       <div class="nw-stop nw-stop-idle">No live provider job</div>
     </footer>
