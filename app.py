@@ -59,7 +59,7 @@ def _zero_gpu_entrypoint(fn: Any) -> Any:
     gpu_decorator = getattr(spaces, "GPU", None) if spaces is not None else None
     if gpu_decorator is None:
         return fn
-    return gpu_decorator(duration=30)(fn)
+    return gpu_decorator(duration=900)(fn)
 
 
 def _relay_snapshot(adult_mode: bool = False) -> dict[str, Any]:
