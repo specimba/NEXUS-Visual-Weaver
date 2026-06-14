@@ -36,6 +36,27 @@ hf spaces info build-small-hackathon/NEXUS_Visual_Weaver --format json
 
 Avoid pytest `--basetemp=C:\tmp` in this Windows sandbox if `tmp_path` fixtures fail with `PermissionError`. The current tests avoid `tmp_path`.
 
+## HF Space Log Observation
+
+Use the authenticated Hugging Face SSE log APIs for final runtime/build evidence. Do not paste tokens into chat or files; use a local environment variable or the local `huggingface_hub` token cache.
+
+```powershell
+# Container logs
+curl.exe -N -H "Authorization: Bearer $env:HF_TOKEN" `
+  "https://huggingface.co/api/spaces/build-small-hackathon/NEXUS_Visual_Weaver/logs/run"
+
+# Build logs
+curl.exe -N -H "Authorization: Bearer $env:HF_TOKEN" `
+  "https://huggingface.co/api/spaces/build-small-hackathon/NEXUS_Visual_Weaver/logs/build"
+```
+
+If local proxy/TLS settings break PowerShell or `curl`, use a bounded Python/httpx stream with `trust_env=False`, loaded from the local HF token cache. Redact the token from any printed output.
+
+Current evidence from the SSE API:
+
+- `logs/run` returns HTTP 200 and shows the Gradio/MCP startup stream.
+- `logs/build` returns HTTP 200 and shows Build Queued for Space commit `dc6756e`.
+
 ## Runtime Flow
 
 1. `run_active_weave` builds the Raven Chronicle run packet.
