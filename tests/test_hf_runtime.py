@@ -2,6 +2,9 @@ import pytest
 from PIL import Image
 
 from nexus_visual_weaver.hf_runtime import FLUX_REPO_ID, HFGenerationResult, generate_flux_image, hf_runtime_enabled
+from PIL import Image
+
+from nexus_visual_weaver.hf_runtime import generate_flux_image, hf_runtime_enabled
 from nexus_visual_weaver.render import render_artifact_lane
 
 
