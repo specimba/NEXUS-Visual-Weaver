@@ -199,6 +199,14 @@ def refresh_section(
     scan: dict[str, Any] | None,
     operator_state: dict[str, Any] | None,
 ) -> tuple[str, str, str, str, str, dict[str, Any]]:
+    """
+    Updates dashboard regions for the selected navigation section.
+    
+    Returns:
+        A tuple containing HTML strings for command_rail, operations, inspector, artifacts, and providers regions, followed by the security scan results.
+    """
+    scan = scan_file(_file_path(upload))
+    regions = _dashboard_regions(adult_mode=adult_mode, scan=scan, active_section=active_section)
     scan = scan or scan_file(None)
     regions = _dashboard_regions(
         run=run,

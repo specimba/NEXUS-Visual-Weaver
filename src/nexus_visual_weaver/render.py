@@ -33,6 +33,15 @@ def icon(name: str) -> str:
 
 
 def _metric(label: str, value: str, tone: str = "neutral") -> str:
+    """
+    Render an HTML metric block with a label and value.
+    
+    Parameters:
+        tone (str): The styling variant name (default: "neutral").
+    
+    Returns:
+        str: HTML markup for the metric.
+    """
     return f'<div class="nw-metric nw-metric-{tone}"><small>{escape(label)}</small><strong>{escape(value)}</strong></div>'
 
 
@@ -66,6 +75,12 @@ def _image_data_uri(path: str | None) -> str | None:
 
 
 def render_command_header() -> str:
+    """
+    Render the command input header section with mode and policy badges.
+    
+    Returns:
+        str: HTML markup for the command input header.
+    """
     return f"""
     <section class="nw-command-header">
       <div>
@@ -84,6 +99,15 @@ def render_command_header() -> str:
 
 
 def render_topbar(adult_mode: bool = False, relay_status: dict | None = None) -> str:
+    """
+    Renders the application topbar with budget metrics, relay status, and adult mode controls.
+    
+    Parameters:
+        relay_status: Dictionary containing relay rotation safety information. Defaults to empty if None.
+    
+    Returns:
+        HTML markup for the topbar section including brand, project, parameter budget meter, connection status, and mode indicators.
+    """
     summary = catalog_summary(adult_mode)
     active = float(summary["active_b"])
     pct = max(0, min(100, int((active / 32.0) * 100)))
@@ -151,6 +175,21 @@ def render_command_rail(active_section: str = "Forge") -> str:
     """
 
 
+def render_workflow(run: GenerationRun | None = None) -> str:
+    """
+    Render an interactive workflow visualization panel displaying the NEXUS processing pipeline.
+    
+    Derives workflow labels (checkpoint, recommendation, actions, models) from the provided run object
+    if available; otherwise displays defaults.
+    
+    Parameters:
+        run (GenerationRun | None): Optional generation run providing checkpoint, model stack, and
+            inspection data. If None, displays placeholder values.
+    
+    Returns:
+        str: HTML section containing a workflow diagram with nodes, edges, legend, and
+            operator console.
+    """
 def render_workflow(run: GenerationRun | None = None, operator_state: dict | None = None) -> str:
     operator_state = operator_state or {}
     workflow = WorkflowState.default()
@@ -259,6 +298,17 @@ def render_workflow(run: GenerationRun | None = None, operator_state: dict | Non
     """
 
 
+def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = None) -> str:
+    """
+    Render the artifact preview lane section with generated artifacts and checkpoint metadata.
+    
+    Parameters:
+    	run (GenerationRun | None): Current generation run; if None, displays dry-run placeholders.
+    	scan (dict | None): Scan status including export_gate; defaults to idle/pending if not provided.
+    
+    Returns:
+    	str: HTML for the artifact preview lane section with preview stage, metadata, and artifact grid.
+    """
 def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = None, operator_state: dict | None = None) -> str:
     scan = scan or {"status": "idle", "export_gate": "pending"}
     operator_state = operator_state or {}
@@ -343,6 +393,21 @@ def render_operations_panel(
     adult_mode: bool = False,
     operator_state: dict | None = None,
 ) -> str:
+    """
+    Render an operations panel with section-specific operation cards.
+    
+    Generates an HTML section containing three operation cards tailored to the selected section.
+    Card content includes operational details drawn from run, scan, and relay status data.
+    Invalid section names default to "Forge".
+    
+    Parameters:
+    	active_section (str): The section name determining which operation cards to display.
+    		Valid sections are "Forge", "Wardrobe", "Lore", "Models", "Security", and "Runs".
+    	adult_mode (bool): If True, scope label is "Private research scope"; otherwise "Public demo scope".
+    
+    Returns:
+    	str: HTML string representing the operations panel section.
+    """
     scan = scan or {"status": "idle", "export_gate": "pending", "findings": []}
     relay_status = relay_status or {}
     operator_state = operator_state or {}
@@ -419,6 +484,14 @@ def render_operations_panel(
 
 
 def _short_repo(repo_id: str) -> str:
+    """
+    Extract the repository name from a repository identifier.
+    
+    Returns the last segment after splitting on forward slashes.
+    
+    Returns:
+        str: The repository name
+    """
     return repo_id.split("/")[-1]
 
 
@@ -468,6 +541,16 @@ def _render_relay_panel(relay_status: dict | None = None) -> str:
 
 
 def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = False) -> str:
+    """
+    Render provider handoff cards based on relay decisions and operational mode.
+    
+    Parameters:
+    	relay_status (dict | None): Relay status containing provider decisions with quota and license gate information.
+    	adult_mode (bool): If True, displays "PRIVATE RESEARCH" label; otherwise "PUBLIC DEMO SAFE".
+    
+    Returns:
+    	str: HTML section markup for the provider cards panel.
+    """
     relay_status = relay_status or {}
     decisions = relay_status.get("decisions", [])
     optional_statuses = {
@@ -588,6 +671,12 @@ def render_inspector(run: GenerationRun | None = None, scan: dict | None = None,
 
 
 def render_drawer(run: GenerationRun | None = None) -> str:
+    """
+    Renders the bottom drawer panel with outfit wardrobe and story beats.
+    
+    Returns:
+        str: HTML markup for the bottom drawer section.
+    """
     if run:
         slots = run.outfit.slots
         beats = run.lore.beats
@@ -682,6 +771,13 @@ def render_dashboard(
     active_section: str = "Forge",
     operator_state: dict | None = None,
 ) -> str:
+    """
+    Render the complete Gradio command center dashboard.
+    
+    Returns:
+        str: The full HTML dashboard markup.
+    """
+    regions = render_dashboard_regions(run, adult_mode, scan, relay_status, active_section)
     regions = render_dashboard_regions(run, adult_mode, scan, relay_status, active_section, operator_state)
     return f"""
     <div class="nw-app">
@@ -712,6 +808,21 @@ def render_dashboard_regions(
     active_section: str = "Forge",
     operator_state: dict | None = None,
 ) -> dict[str, str]:
+    """
+    Render all dashboard UI regions.
+    
+    Returns a dictionary of HTML strings, each representing a rendered dashboard region.
+    
+    Parameters:
+        run: A generation run, or None for dry-run defaults.
+        adult_mode: Whether to render adult-mode content.
+        scan: Scanner status and findings, or None for idle defaults.
+        relay_status: Model relay configuration and decisions, or None for defaults.
+        active_section: The currently active navigation section.
+    
+    Returns:
+        dict[str, str]: HTML markup strings keyed by region name (topbar, rail, command_rail, workflow, operations, inspector, drawer, status, artifacts, providers).
+    """
     return {
         "topbar": render_topbar(adult_mode, relay_status),
         "rail": render_left_rail(active_section),
