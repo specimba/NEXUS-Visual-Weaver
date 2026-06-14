@@ -44,12 +44,15 @@ def _image_data_url(path: str | None) -> str | None:
     if not path:
         return None
     target = Path(path)
-    if not target.exists() or not target.is_file():
+    try:
+        if not target.exists() or not target.is_file():
+            return None
+        suffix = target.suffix.lower()
+        mime = "image/png" if suffix == ".png" else "image/jpeg" if suffix in {".jpg", ".jpeg"} else "image/webp"
+        data = base64.b64encode(target.read_bytes()).decode("ascii")
+        return f"data:{mime};base64,{data}"
+    except OSError:
         return None
-    suffix = target.suffix.lower()
-    mime = "image/png" if suffix == ".png" else "image/jpeg" if suffix in {".jpg", ".jpeg"} else "image/webp"
-    data = base64.b64encode(target.read_bytes()).decode("ascii")
-    return f"data:{mime};base64,{data}"
 
 
 def _post_json(url: str, token: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
