@@ -657,6 +657,15 @@ footer { display: none !important; }
     linear-gradient(155deg, #050608, #171d23 44%, #4f1020 45%, #07090c 63%);
   border-right: 1px solid rgba(255,255,255,.08);
 }
+.nw-preview-real-image {
+  width: 100%;
+  min-height: 190px;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-right: 1px solid rgba(255,255,255,.08);
+  background: #050608;
+}
 .nw-preview-caption {
   display: grid;
   align-content: end;

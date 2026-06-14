@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import base64
 from html import escape
+from pathlib import Path
 
 from .catalog import catalog_summary, parameter_budget
 from .schema import GenerationRun
@@ -49,6 +51,18 @@ def _space_runtime_status() -> dict[str, str]:
         "bucket": bucket,
         "secrets": secrets,
     }
+
+
+def _image_data_uri(path: str | None) -> str | None:
+    if not path:
+        return None
+    target = Path(path)
+    if not target.exists() or not target.is_file():
+        return None
+    suffix = target.suffix.lower()
+    mime = "image/png" if suffix == ".png" else "image/jpeg" if suffix in {".jpg", ".jpeg"} else "image/webp" if suffix == ".webp" else "application/octet-stream"
+    data = base64.b64encode(target.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{data}"
 
 
 def render_command_header() -> str:
@@ -255,6 +269,10 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
     active_prompt = run.refined_prompt.refined[:150] if run else "Awaiting first weave. The preview stage shows dry-run handoff packets until provider output exists."
     checkpoint = operator_state.get("checkpoint", getattr(run.checkpoint, "recommendation", "pending") if run else "pending")
     provider_state = str(operator_state.get("provider_state", "dry-run" if run else "idle"))
+    generation = operator_state.get("generation") or {}
+    generated_uri = _image_data_uri(generation.get("output_path")) if isinstance(generation, dict) else None
+    generated_status = str(generation.get("status", "")) if isinstance(generation, dict) else ""
+    generated_message = str(generation.get("message", "")) if isinstance(generation, dict) else ""
     preview_mode = {
         "idle": "Idle",
         "dry-run": "Dry Run",
@@ -293,11 +311,11 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
       </div>
       <div class="nw-preview-stage">
         <div class="nw-preview-frame">
-          <i class="nw-preview-image"></i>
+          {'<img class="nw-preview-real-image" src="' + generated_uri + '" alt="Generated FLUX artifact" />' if generated_uri else '<i class="nw-preview-image"></i>'}
           <div class="nw-preview-caption">
-            <small>PRIMARY OUTPUT STAGE / JUDGE-SAFE DEMO OUTPUT / SEED {escape(demo_seed)}</small>
-            <strong>Deterministic Raven Chronicle proof frame</strong>
-            <span>{escape(active_prompt)}</span>
+            <small>PRIMARY OUTPUT STAGE / {escape(generated_status.upper() or "JUDGE-SAFE DEMO OUTPUT")} / SEED {escape(demo_seed)}</small>
+            <strong>{'Real FLUX.2 Klein artifact' if generated_uri else 'Deterministic Raven Chronicle proof frame'}</strong>
+            <span>{escape(generated_message or active_prompt)}</span>
           </div>
         </div>
         <div class="nw-preview-meta">

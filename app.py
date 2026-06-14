@@ -20,6 +20,7 @@ except Exception:  # pragma: no cover - local development does not require Space
     spaces = None
 
 from nexus_visual_weaver.catalog import catalog_summary
+from nexus_visual_weaver.hf_runtime import generate_flux_image
 from nexus_visual_weaver.model_relay import WeaverModelRelay
 from nexus_visual_weaver.planner import build_command_center_run
 from nexus_visual_weaver.render import render_catalog_table, render_command_header, render_dashboard_regions
@@ -129,11 +130,13 @@ def run_weave(
         adult_mode=adult_mode,
     )
     scan = scan_file(_file_path(upload))
+    generation = generate_flux_image(run.refined_prompt.refined, seed=int(run.checkpoint.checkpoint_id[-6:], 16) % 1_000_000)
     operator_state = {
-        "provider_state": "checkpointed",
+        "provider_state": generation.provider_state if generation.status in {"success", "error", "missing_runtime", "no_cuda"} else "checkpointed",
         "checkpoint": "pending_review",
         "export": scan.get("export_gate", "pending"),
-        "message": "Run packet generated. Human checkpoint required before provider promotion or export.",
+        "message": generation.message or "Run packet generated. Human checkpoint required before provider promotion or export.",
+        "generation": generation.to_dict(),
     }
     regions = _dashboard_regions(
         run=run,
