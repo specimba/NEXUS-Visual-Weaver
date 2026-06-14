@@ -98,7 +98,7 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
     try:
         dtype = torch.bfloat16
         token = _hf_token()
-        pipe = Flux2KleinPipeline.from_pretrained(FLUX_REPO_ID, torch_dtype=dtype, token=token)
+        pipe = FluxPipeline.from_pretrained(FLUX_REPO_ID, torch_dtype=dtype, token=token)
         pipe.enable_model_cpu_offload()
         generator = torch.Generator(device="cuda").manual_seed(seed)
         image = pipe(
