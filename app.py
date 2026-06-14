@@ -69,6 +69,15 @@ def _relay_snapshot(adult_mode: bool = False) -> dict[str, Any]:
 
 
 def _file_path(uploaded: Any) -> str | None:
+    """
+    Normalize a Gradio file input to a filesystem path.
+    
+    Parameters:
+        uploaded: A Gradio file input, which may be None, a string, or an object with a 'name' attribute.
+    
+    Returns:
+        The filesystem path as a string, or None if the input is None or has no retrievable path.
+    """
     if uploaded is None:
         return None
     if isinstance(uploaded, str):
@@ -78,6 +87,12 @@ def _file_path(uploaded: Any) -> str | None:
 
 
 def _checkpoint_seed(checkpoint_id: str) -> int:
+    """
+    Derives a deterministic image seed from a checkpoint ID.
+    
+    Returns:
+        int: A seed value in the range [0, 999999], or 0 if no valid hexadecimal digits are found in the checkpoint ID.
+    """
     suffix = "".join(char for char in checkpoint_id[-8:] if char in "0123456789abcdefABCDEF")
     if not suffix:
         return 0
@@ -88,6 +103,15 @@ def _checkpoint_seed(checkpoint_id: str) -> int:
 
 
 def _wardrobe_summary(run: Any) -> str:
+    """
+    Create a semicolon-separated summary of an outfit's slots.
+    
+    Parameters:
+        run: The run object containing the outfit to summarize.
+    
+    Returns:
+        A semicolon-separated string listing each slot's name, description, material, palette, and locked status.
+    """
     slots = getattr(getattr(run, "outfit", None), "slots", []) or []
     return "; ".join(
         f"{slot.name}: {slot.description}, material={slot.material}, palette={slot.palette}, locked={slot.locked}"
@@ -124,6 +148,20 @@ def run_weave(
     upload: Any,
     active_section: str,
 ) -> tuple[Any, ...]:
+    """
+    Executes the complete multi-stage workflow—building a run plan, generating an image with reference scanning, gathering judge evidence, and assembling operator state—then renders the dashboard with all artifacts.
+    
+    Parameters:
+    	prompt (str): Creative brief; defaults to DEFAULT_PROMPT if empty
+    	reasoning_mode (str): Planning reasoning mode (e.g., Strict, Frontier)
+    	video_preset (str): Video generation preset
+    	adult_mode (bool): Visibility mode toggle
+    	upload: Optional reference image file for comparison
+    	active_section (str): Current dashboard navigation section
+    
+    Returns:
+    	tuple: Dashboard HTML regions (topbar, command_rail, workflow, operations, inspector, drawer, status, artifacts, providers), catalog HTML, run dict, catalog summary, generated scan results, run object, generated scan dict again, operator state dict with generation/judge artifacts, and Gradio update for stop button interactivity
+    """
     prompt = prompt.strip() or DEFAULT_PROMPT
     run = build_command_center_run(
         prompt=prompt,
@@ -193,6 +231,13 @@ def toggle_adult_visibility(
     active_section: str,
     upload: Any,
 ) -> tuple[Any, ...]:
+    """
+    Refresh the dashboard to reflect changes in adult content visibility.
+    
+    Returns:
+        A tuple of updated dashboard HTML regions, rendered catalog table, 
+        catalog summary, scan results, and operator state.
+    """
     scan = scan_file(_file_path(upload))
     operator_state = {
         **_default_operator_state(),
@@ -221,10 +266,17 @@ def refresh_section(
     operator_state: dict[str, Any] | None,
 ) -> tuple[str, str, str, str, str, dict[str, Any]]:
     """
-    Updates dashboard regions for the selected navigation section.
-
+    Re-render dashboard regions when the active navigation section changes.
+    
+    Parameters:
+    	active_section (str): The selected dashboard section (e.g., "Forge", "Wardrobe", "Lore", "Models", "Security", "Runs")
+    	adult_mode (bool): Whether to display adult content
+    	run (Any | None): The current run object, if one exists
+    	scan (dict[str, Any] | None): Current security scan results
+    	operator_state (dict[str, Any] | None): Current operator state machine state
+    
     Returns:
-        A tuple containing HTML strings for command_rail, operations, inspector, artifacts, and providers regions, followed by the security scan results.
+    	tuple[str, str, str, str, str, dict[str, Any]]: HTML for command_rail, operations, inspector, artifacts, and providers regions, followed by the scan results dictionary
     """
     scan = scan or scan_file(None)
     regions = _dashboard_regions(
@@ -244,6 +296,14 @@ def _render_stateful(
     active_section: str,
     operator_state: dict[str, Any],
 ) -> tuple[Any, ...]:
+    """
+    Render all dashboard components based on the current operational state.
+    
+    Returns:
+    	A tuple containing all dashboard region HTML strings, catalog table HTML, 
+    	run data, catalog summary, scan results, operator state, and stop button 
+    	interactivity update.
+    """
     scan = scan or scan_file(None)
     regions = _dashboard_regions(
         run=run,
@@ -278,6 +338,15 @@ def scan_reference(
     active_section: str,
     operator_state: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
+    """
+    Scan and judge an uploaded reference file, updating operator state and dashboard.
+    
+    Parameters:
+        run: The current run context, or None if no run is active.
+    
+    Returns:
+        A tuple containing rendered dashboard regions and the scan result dictionary.
+    """
     scan = scan_file(_file_path(upload))
     minicpm = None
     if run is not None:
@@ -306,6 +375,12 @@ def approve_checkpoint(
     active_section: str,
     operator_state: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
+    """
+    Approves a checkpoint and sets export readiness, or blocks if the run or generated artifact does not exist.
+    
+    Returns:
+        Tuple of dashboard updates and operator state reflecting the checkpoint approval or block.
+    """
     scan = scan or scan_file(None)
     if run is None:
         next_state = {**_default_operator_state(), "provider_state": "blocked", "message": "No run exists yet. Run Active Weave first."}
@@ -335,6 +410,14 @@ def export_packet(
     active_section: str,
     operator_state: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
+    """
+    Prepares an export packet if all validation gates pass, or blocks the export with an appropriate message.
+    
+    Validates that an active run exists, the checkpoint has been approved, and the ST3GG export gate is clear. If all conditions are met, writes the export packet and updates the operator state to mark the export as complete. Otherwise, sets the provider state to "blocked" with a descriptive reason.
+    
+    Returns:
+        Tuple containing the updated dashboard state, including HTML regions, JSON data, and operator state.
+    """
     scan = scan or scan_file(None)
     state = operator_state or _default_operator_state()
     if run is None:
@@ -362,6 +445,12 @@ def stop_provider_job(
     active_section: str,
     operator_state: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
+    """
+    Stops the provider job and refreshes the dashboard to reflect the stopped state.
+    
+    Returns:
+        A tuple of dashboard component updates with the stopped provider state.
+    """
     scan = scan or scan_file(None)
     next_state = {
         **(operator_state or _default_operator_state()),
@@ -375,6 +464,9 @@ def reset_demo(
     adult_mode: bool,
     active_section: str,
 ) -> tuple[Any, ...]:
+    """
+    Reset the demo to its initial state, clearing all generated artifacts and scan data.
+    """
     scan = scan_file(None)
     operator_state = _default_operator_state()
     regions = _dashboard_regions(adult_mode=adult_mode, scan=scan, active_section=active_section, operator_state=operator_state)

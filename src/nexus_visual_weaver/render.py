@@ -12,6 +12,16 @@ from .schema import GenerationRun
 
 
 def badge(label: str, tone: str = "neutral") -> str:
+    """
+    Render an HTML badge element with styling based on tone.
+    
+    Parameters:
+        label (str): The text content to display in the badge
+        tone (str): The styling variant for the badge (default: "neutral")
+    
+    Returns:
+        str: An HTML string containing a styled badge element
+    """
     return f'<span class="nw-badge nw-{tone}">{escape(label)}</span>'
 
 
@@ -49,6 +59,12 @@ def _env_configured(*names: str) -> bool:
 
 
 def _space_runtime_status() -> dict[str, str]:
+    """
+    Gathers runtime environment and provider configuration information.
+    
+    Returns:
+    	dict[str, str]: A dictionary containing space identifier, hardware configuration, data bucket status, and a summary of configured providers.
+    """
     space_id = os.environ.get("SPACE_ID") or os.environ.get("HF_SPACE_ID") or "local-preview"
     hardware = os.environ.get("SPACE_HARDWARE") or os.environ.get("NEXUS_SPACE_HARDWARE") or "ZeroGPU"
     bucket = "/data mounted" if os.path.isdir("/data") else "bucket optional"
@@ -71,6 +87,17 @@ def _space_runtime_status() -> dict[str, str]:
 
 
 def _image_data_uri(path: str | None) -> str | None:
+    """
+    Convert a file to a base64-encoded data URI.
+    
+    Infers MIME type from the file extension; defaults to application/octet-stream for unknown types. Returns None if the path is empty, does not exist, or is not a regular file.
+    
+    Parameters:
+        path: File path to encode.
+    
+    Returns:
+        Data URI string (data:mime;base64,...) for valid files, None otherwise.
+    """
     if not path:
         return None
     target = Path(path)
@@ -83,6 +110,12 @@ def _image_data_uri(path: str | None) -> str | None:
 
 
 def render_command_header() -> str:
+    """
+    Render the command input header section with fixed operational badges.
+    
+    Returns:
+        str: An HTML string containing the command header title, description, and fixed mode/policy badges.
+    """
     return f"""
     <section class="nw-command-header">
       <div>
@@ -101,6 +134,18 @@ def render_command_header() -> str:
 
 
 def render_trust_strip(scan: dict | None = None, operator_state: dict | None = None) -> str:
+    """
+    Render a trust and safety information strip for artifact export.
+    
+    Displays scan status, export gate state, checkpoint information, and safety messaging.
+    
+    Parameters:
+    	scan (dict | None): Scan results with status, export_gate, findings, and purification_actions keys.
+    	operator_state (dict | None): Operator state containing checkpoint status.
+    
+    Returns:
+    	str: HTML markup for the trust strip section.
+    """
     scan = scan or {"status": "idle", "export_gate": "pending", "findings": [], "purification_actions": []}
     operator_state = operator_state or {}
     status = str(scan.get("status", "idle")).upper()
@@ -135,13 +180,15 @@ def render_topbar(
     operator_state: dict | None = None,
 ) -> str:
     """
-    Renders the application topbar with budget metrics, relay status, and adult mode controls.
+    Generate the application topbar with budget metrics, relay status, and trust indicators.
     
     Parameters:
-        relay_status: Dictionary containing relay rotation safety information. Defaults to empty if None.
+        relay_status: Dictionary containing relay rotation safety information.
+        scan: Dictionary containing security scan results for trust indicators.
+        operator_state: Dictionary containing operator-driven UI state for trust indicators.
     
     Returns:
-        HTML markup for the topbar section including brand, project, parameter budget meter, connection status, and mode indicators.
+        HTML markup for the topbar section including brand, project, budget meter, connection status, space information, and trust strip.
     """
     summary = catalog_summary(adult_mode)
     active = float(summary["active_b"])
@@ -192,6 +239,15 @@ def render_left_rail(active_section: str = "Forge") -> str:
 
 
 def render_command_rail(active_section: str = "Forge") -> str:
+    """
+    Render a command rail with section-specific hints and selection badge.
+    
+    Parameters:
+        active_section (str): The name of the section to display.
+    
+    Returns:
+        str: HTML markup for the command rail component.
+    """
     section = escape(active_section)
     hints = {
         "Forge": ("Active Weave", "Prompt, judge, locate, generate, checkpoint."),
@@ -212,6 +268,20 @@ def render_command_rail(active_section: str = "Forge") -> str:
 
 
 def render_workflow(run: GenerationRun | None = None, operator_state: dict | None = None) -> str:
+    """
+    Render a workflow graph visualization panel showing the NEXUS generation pipeline.
+    
+    Displays nodes for seed prompt, refine, judge, locate, generate, video, and human checkpoint
+    stages with status indicators and operator-driven recommendations. Console cards show selected
+    node info, next operator action, pinned model lanes, and workflow signals.
+    
+    Parameters:
+        operator_state (dict | None): Dictionary with optional keys for checkpoint status,
+            provider state, and recommendation message.
+    
+    Returns:
+        str: HTML string containing the workflow panel with SVG graph and console cards.
+    """
     operator_state = operator_state or {}
     score = run.checkpoint.trust_score if run else 0.82
     checkpoint_id = run.checkpoint.checkpoint_id if run else "nw-dry-run"
@@ -319,6 +389,12 @@ def render_workflow(run: GenerationRun | None = None, operator_state: dict | Non
 
 
 def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = None, operator_state: dict | None = None) -> str:
+    """
+    Renders an artifact preview lane with generation output, checkpoint metadata, and continuity information.
+    
+    Returns:
+        str: HTML markup for the artifact preview panel.
+    """
     scan = scan or {"status": "idle", "export_gate": "pending"}
     operator_state = operator_state or {}
     prompt_label = "Prompt proof"
@@ -406,13 +482,21 @@ def render_operations_panel(
     Render an operations panel with section-specific operation cards.
     
     Generates an HTML section containing three operation cards tailored to the selected section.
-    Card content includes operational details drawn from run, scan, and relay status data.
-    Invalid section names default to "Forge".
+    Card content is drawn from run checkpoint data, scan results, relay decisions, and operator state
+    to display operational context. When the section name is invalid, defaults to "Forge".
     
     Parameters:
-    	active_section (str): The section name determining which operation cards to display.
+    	active_section (str): Section name determining which operation cards to display.
     		Valid sections are "Forge", "Wardrobe", "Lore", "Models", "Security", and "Runs".
-    	adult_mode (bool): If True, scope label is "Private research scope"; otherwise "Public demo scope".
+    	run (GenerationRun | None): Generation run containing checkpoint, outfit, and lore data
+    		for card content. If absent, defaults are used.
+    	scan (dict | None): Scan result dict with status, export_gate, and findings. Defaults
+    		to idle status and pending export gate.
+    	relay_status (dict | None): Relay status dict with decisions list for model selection.
+    	adult_mode (bool): If True, scope label is "Private research scope"; otherwise
+    		"Public demo scope".
+    	operator_state (dict | None): Operator state dict with provider_state and message for
+    		display in card bodies.
     
     Returns:
     	str: HTML string representing the operations panel section.
@@ -505,6 +589,12 @@ def _short_repo(repo_id: str) -> str:
 
 
 def _render_relay_panel(relay_status: dict | None = None) -> str:
+    """
+    Render the GMR ModelRelay panel showing pinned providers and relay decisions.
+    
+    Returns:
+        HTML string for the relay panel section.
+    """
     relay_status = relay_status or {}
     pinned = relay_status.get("pinned", {})
     decisions = relay_status.get("decisions", [])
@@ -551,14 +641,19 @@ def _render_relay_panel(relay_status: dict | None = None) -> str:
 
 def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = False) -> str:
     """
-    Render provider handoff cards based on relay decisions and operational mode.
+    Render provider handoff cards for relay decisions and optional gateway providers.
+    
+    Constructs a panel section displaying configured provider cards from relay decisions, each with
+    quota and license gate information. Includes optional provider cards for environment-configured
+    gateways (OpenBMB, NVIDIA, FAL, Netlify, Cloudflare). Falls back to a single dry-run card if
+    no relay decisions are available.
     
     Parameters:
-    	relay_status (dict | None): Relay status containing provider decisions with quota and license gate information.
-    	adult_mode (bool): If True, displays "PRIVATE RESEARCH" label; otherwise "PUBLIC DEMO SAFE".
+    	relay_status (dict | None): Relay status containing "decisions" list with provider, quota impact, and license gate fields.
+    	adult_mode (bool): Determines mode label display ("PRIVATE RESEARCH" if True, "PUBLIC DEMO SAFE" otherwise).
     
     Returns:
-    	str: HTML section markup for the provider cards panel.
+    	str: HTML section markup containing the provider cards grid, mode badge, and summary text.
     """
     relay_status = relay_status or {}
     decisions = relay_status.get("decisions", [])
@@ -620,6 +715,12 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
 
 
 def _scan_status_tone(scan_status: str) -> str:
+    """
+    Determine the badge tone for a scan status.
+    
+    Returns:
+        str: "pass" for "pass" status, "warn" for "review" or "error", "muted" otherwise.
+    """
     if scan_status == "pass":
         return "pass"
     if scan_status in {"review", "error"}:
@@ -633,6 +734,18 @@ def render_inspector(
     relay_status: dict | None = None,
     operator_state: dict | None = None,
 ) -> str:
+    """
+    Generates an inspector panel HTML section with material checklist, model stack, sponsor evidence, and scan information.
+    
+    Parameters:
+    	run (GenerationRun | None): Run data for checklist and model stack; static defaults applied if not provided.
+    	scan (dict | None): Scan findings and actions.
+    	relay_status (dict | None): Relay status.
+    	operator_state (dict | None): Sponsor evidence fields.
+    
+    Returns:
+    	str: Complete HTML for the inspector panel.
+    """
     if run:
         checks = [
             ("Patent Leather", True),
@@ -838,7 +951,8 @@ def render_dashboard_regions(
     """
     Render all dashboard UI regions.
     
-    Returns a dictionary of HTML strings, each representing a rendered dashboard region.
+    Orchestrates rendering of each dashboard region by passing parameters through to specialized
+    renderers and aggregates the results into a single dictionary.
     
     Parameters:
         run: A generation run, or None for dry-run defaults.
@@ -846,9 +960,10 @@ def render_dashboard_regions(
         scan: Scanner status and findings, or None for idle defaults.
         relay_status: Model relay configuration and decisions, or None for defaults.
         active_section: The currently active navigation section.
+        operator_state: Operator-provided UI state overrides, or None for defaults.
     
     Returns:
-        dict[str, str]: HTML markup strings keyed by region name (topbar, rail, command_rail, workflow, operations, inspector, drawer, status, artifacts, providers).
+        dict[str, str]: HTML markup keyed by region name: topbar, rail, command_rail, workflow, operations, inspector, drawer, status, artifacts, providers.
     """
     return {
         "topbar": render_topbar(adult_mode, relay_status, scan, operator_state),

@@ -429,6 +429,14 @@ class WeaverModelRelay:
 
 
 def default_model_records() -> list[ModelRecord]:
+    """
+    Return the default model inventory for all lanes.
+    
+    Returns:
+    	list[ModelRecord]: Default model records across pinned and rotatable lanes,
+    		including models for image generation, grounding, security, routing,
+    		quality judgment, TTS, video repair, and catalog research.
+    """
     return [
         ModelRecord(
             model_id="flux2-klein-4b-public",

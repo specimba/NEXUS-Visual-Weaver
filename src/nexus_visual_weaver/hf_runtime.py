@@ -66,6 +66,17 @@ def _hf_token() -> str | None:
 
 
 def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height: int = 1024, steps: int = 4) -> HFGenerationResult:
+    """
+    Generate an image from a text prompt using the FLUX.2 Klein 4B model.
+    
+    Checks runtime enablement and prerequisites before attempting generation.
+    Returns a detailed result object reflecting success or specific failure reason
+    (disabled, missing dependencies, no GPU, generation error).
+    
+    Returns:
+        HFGenerationResult: Generation outcome including status, output path if successful,
+        latency, and diagnostic information.
+    """
     if not hf_runtime_enabled():
         return HFGenerationResult(
             status="disabled",

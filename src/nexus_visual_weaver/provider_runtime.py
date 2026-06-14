@@ -30,10 +30,22 @@ class ProviderJudgeResult:
     latency_seconds: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """
+        Convert this result instance to a plain dictionary.
+        
+        Returns:
+        	dict[str, Any]: A dictionary representation of this result.
+        """
         return asdict(self)
 
 
 def _short_error(exc: BaseException) -> str:
+    """
+    Convert an exception to a single-line, truncated error message.
+    
+    Returns:
+    	str: Error message in the format "ClassName: message", truncated to 360 characters.
+    """
     text = str(exc).replace("\n", " ").strip()
     if len(text) > 360:
         text = text[:357] + "..."
@@ -41,6 +53,15 @@ def _short_error(exc: BaseException) -> str:
 
 
 def _image_data_url(path: str | None) -> str | None:
+    """
+    Convert an image file to a base64-encoded data URL.
+    
+    Parameters:
+    	path (str | None): The file path to the image.
+    
+    Returns:
+    	str | None: A data URL string with base64-encoded image data and appropriate MIME type (image/png, image/jpeg, or image/webp), or None if the file is invalid or does not exist.
+    """
     if not path:
         return None
     target = Path(path)
@@ -53,6 +74,12 @@ def _image_data_url(path: str | None) -> str | None:
 
 
 def _post_json(url: str, token: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
+    """
+    Send a JSON POST request with Bearer token authorization.
+    
+    Returns:
+        dict[str, Any]: The parsed JSON response.
+    """
     body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         url,
@@ -68,6 +95,20 @@ def _post_json(url: str, token: str, payload: dict[str, Any], timeout: float) ->
 
 
 def _extract_content(response: dict[str, Any]) -> str:
+    """
+    Extract the message content from a chat-completions API response.
+    
+    If the content is a string, returns it as-is. If the content is non-string data,
+    JSON-encodes it. Returns an empty string if no choices are available.
+    
+    Parameters:
+        response (dict): A chat-completions API response containing a "choices" list
+                         with message objects.
+    
+    Returns:
+        str: The extracted message content, or its JSON-encoded representation if the
+             content is not a string. Returns an empty string if no choices are available.
+    """
     choices = response.get("choices") or []
     if not choices:
         return ""
@@ -79,6 +120,17 @@ def _extract_content(response: dict[str, Any]) -> str:
 
 
 def _safe_json_from_text(text: str) -> dict[str, Any]:
+    """
+    Extract and parse a JSON object from text, with fallback handling for unparseable content.
+    
+    Attempts to isolate a JSON object from the input text by finding the first opening brace and last closing brace. If JSON parsing fails or the parsed result is not a dictionary, returns a fallback structure containing the input text (truncated to 1200 characters) under the "raw_summary" key. An empty input returns an empty dictionary.
+    
+    Parameters:
+        text (str): The text from which to extract and parse JSON.
+    
+    Returns:
+        dict[str, Any]: The parsed JSON object as a dictionary, or a fallback dictionary with "raw_summary" key containing the original text if parsing fails.
+    """
     stripped = text.strip()
     if not stripped:
         return {}
@@ -101,6 +153,17 @@ def judge_with_minicpm(
     wardrobe_summary: str,
     timeout: float = 45.0,
 ) -> ProviderJudgeResult:
+    """
+    Evaluate a generated image against a fashion brief using the OpenBMB MiniCPM-V model.
+    
+    API credentials are read from environment variables: MINICPM_BASE_URL, MINICPM_API_KEY (or OPENBMB_API_KEY), and optionally MINICPM_MODEL.
+    
+    Parameters:
+        scan: Dictionary containing scan metadata; the 'export_gate' key is extracted for result evidence.
+    
+    Returns:
+        ProviderJudgeResult with status 'missing_secret' if credentials are unconfigured, 'no_artifact' if the image is unavailable, 'success' on successful judgment, or 'failed' on API errors. Includes parsed JSON evidence from the model's response (or a fallback summary if parsing fails) and measured call latency.
+    """
     base_url = os.environ.get("MINICPM_BASE_URL", "").rstrip("/")
     token = os.environ.get("MINICPM_API_KEY") or os.environ.get("OPENBMB_API_KEY")
     model = os.environ.get("MINICPM_MODEL", "MiniCPM-V-4.6")
@@ -180,6 +243,20 @@ def judge_with_nemotron(
     minicpm_result: dict[str, Any] | None = None,
     timeout: float = 45.0,
 ) -> ProviderJudgeResult:
+    """
+    Requests structured evidence from NVIDIA Nemotron about a visual creation run.
+    
+    Reads configuration from NEMOTRON_BASE_URL and NEMOTRON_API_KEY (or NVIDIA_API_KEY) environment variables. If configuration is incomplete, returns a "missing_secret" result. Posts a chat completions request with the prompt, run packet (JSON-truncated), and optional MiniCPM result; parses the response into structured evidence and records call latency. Returns a "failed" result on network, timeout, or parsing errors.
+    
+    Parameters:
+    	prompt (str): Description or context of the visual creation to be evaluated.
+    	run_packet (dict[str, Any]): Metadata and details about the current run.
+    	minicpm_result (dict[str, Any] | None, optional): Prior MiniCPM judgment result for context. Defaults to None.
+    	timeout (float, optional): HTTP request timeout in seconds. Defaults to 45.0.
+    
+    Returns:
+    	ProviderJudgeResult: Result containing status ("missing_secret", "success", or "failed"), evidence (parsed JSON or raw summary), latency_seconds, and configuration details.
+    """
     base_url = os.environ.get("NEMOTRON_BASE_URL", "").rstrip("/")
     token = os.environ.get("NEMOTRON_API_KEY") or os.environ.get("NVIDIA_API_KEY")
     model = os.environ.get("NEMOTRON_MODEL", "nvidia/NVIDIA-Nemotron-Parse-v1.2")

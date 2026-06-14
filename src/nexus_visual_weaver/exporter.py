@@ -12,6 +12,14 @@ from .catalog import active_stack, parameter_budget
 
 
 def export_root() -> Path:
+    """
+    Resolve the export directory path, creating it if necessary.
+    
+    Uses NEXUS_EXPORT_DIR if set, otherwise defaults to /data/nexus_visual_weaver/exports or outputs/exports.
+    
+    Returns:
+        A Path object pointing to the export directory.
+    """
     requested = os.environ.get("NEXUS_EXPORT_DIR")
     candidates = [Path(requested)] if requested else []
     if Path("/data").exists():
@@ -37,6 +45,18 @@ def write_export_packet(
     operator_state: dict[str, Any],
     adult_mode: bool,
 ) -> dict[str, Any]:
+    """
+    Constructs and writes a structured JSON export packet containing run metadata, evidence, and model information.
+    
+    The packet is written as JSON to the export directory. The filename is derived from the run's checkpoint identifier or generated with the current timestamp.
+    
+    Parameters:
+        run: Object containing checkpoint and request information to identify the run
+        operator_state: Dictionary containing generation metadata, evaluation results, and checkpoint status
+    
+    Returns:
+        Dictionary with "path" (string path to the written JSON file) and "packet" (the constructed packet object)
+    """
     run_id = getattr(getattr(run, "checkpoint", None), "checkpoint_id", f"nw-{int(time.time())}")
     stack = active_stack(adult_mode)
     generation = dict(operator_state.get("generation") or {})
