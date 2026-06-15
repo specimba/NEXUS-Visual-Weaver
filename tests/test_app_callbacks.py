@@ -93,10 +93,12 @@ def test_run_weave_returns_stateful_dashboard_packet() -> None:
         "Forge",
     )
 
-    assert len(result) == 17
+    assert len(result) == 19
     assert result[13].checkpoint.checkpoint_id.startswith("nw-")
-    assert result[15]["provider_state"] == "checkpointed"
-    assert result[16]["interactive"] is True
+    assert result[15]["provider_state"] == "dry-run"
+    assert result[16]["interactive"] is False
+    assert result[17]["interactive"] is False
+    assert result[18]["interactive"] is False
     assert result[15]["creator_controls"]["wardrobe"]["footwear"] == "platform boots"
     assert result[15]["generation"]["lora_status"] == "disabled"
 
@@ -123,6 +125,9 @@ def test_run_weave_persists_additive_creator_controls_and_reference_url_metadata
 
     assert state["creator_controls"]["reasoning_mode"] == "Frontier"
     assert state["creator_controls"]["wardrobe"]["footwear"] == "patent leather heels"
+    assert state["creator_controls"]["generation"]["seed"] >= 0
+    assert state["creator_controls"]["generation"]["style_strength"] == "High Fashion"
+    assert state["creator_controls"]["generation"]["aspect"] == "Portrait"
     assert state["reference_metadata"][0]["source"] == "url"
     assert state["reference_metadata"][0]["domain"] == "shop.example.test"
     assert "url_hash" in state["reference_metadata"][0]
@@ -227,9 +232,9 @@ def test_reference_scan_cannot_clear_blocked_generated_artifact() -> None:
     scanned = app.scan_reference(run, False, str(clean_reference), "Forge", state)
     assert scanned[13]["reference_scan"]["export_gate"] == "clear"
     assert scanned[13]["export"] == "blocked"
-    assert scanned[15]["export_gate"] == "blocked"
+    assert scanned[17]["export_gate"] == "blocked"
 
-    approved = app.approve_checkpoint(run, False, scanned[15], "Forge", scanned[13])
+    approved = app.approve_checkpoint(run, False, scanned[17], "Forge", scanned[13])
     assert approved[13]["provider_state"] == "checkpointed"
     assert approved[13]["export"] == "blocked"
 
@@ -257,9 +262,9 @@ def test_blocked_reference_scan_does_not_block_clear_generated_artifact() -> Non
     scanned = app.scan_reference(run, False, str(blocked_reference), "Forge", state)
     assert scanned[13]["reference_scan"]["export_gate"] == "blocked"
     assert scanned[13]["export"] == "clear"
-    assert scanned[15]["export_gate"] == "clear"
+    assert scanned[17]["export_gate"] == "clear"
 
-    approved = app.approve_checkpoint(run, False, scanned[15], "Forge", scanned[13])
+    approved = app.approve_checkpoint(run, False, scanned[17], "Forge", scanned[13])
     assert approved[13]["provider_state"] == "export_ready"
     assert approved[13]["export"] == "clear"
 
@@ -517,6 +522,21 @@ def test_creator_controls_generation_specifies_flux_primary() -> None:
     assert "black-forest-labs/FLUX.2-klein-4B" in generation["flux_sidecar"]
 
 
+def test_creator_controls_generation_persists_seed_style_and_aspect() -> None:
+    result = app._creator_controls(
+        "Strict",
+        "Wan2.2 I2V",
+        seed=123,
+        style_strength="Cinematic",
+        aspect="Square",
+    )
+    generation = result["generation"]
+
+    assert generation["seed"] == 123
+    assert generation["style_strength"] == "Cinematic"
+    assert generation["aspect"] == "Square"
+
+
 # --- _prompt_with_controls tests ---
 
 def test_prompt_with_controls_appends_wardrobe_suffix() -> None:
@@ -526,6 +546,7 @@ def test_prompt_with_controls_appends_wardrobe_suffix() -> None:
     assert result.startswith("gothic couture portrait")
     assert "Wardrobe controls:" in result
     assert "platform boots" in result
+    assert "Style direction:" in result
 
 
 def test_prompt_with_controls_returns_prompt_unchanged_when_no_wardrobe() -> None:
@@ -553,6 +574,36 @@ def test_prompt_with_controls_includes_all_wardrobe_fields() -> None:
     assert "Chantilly lace neckline" in result
     assert "platform boots" in result
     assert "crimson hardware" in result
+
+
+def test_generation_dimensions_support_portrait_and_square() -> None:
+    assert app._generation_dimensions("Portrait") == (832, 1216)
+    assert app._generation_dimensions("Square") == (1024, 1024)
+    assert app._generation_dimensions("unknown") == (832, 1216)
+
+
+def test_resolve_seed_randomizes_negative_and_uses_explicit_seed() -> None:
+    assert app._resolve_seed(42) == 42
+    assert app._resolve_seed("42") == 42
+    assert 0 <= app._resolve_seed(-1) < 1_000_000_000
+
+
+def test_button_updates_unlock_checkpoint_then_export() -> None:
+    state = {
+        "provider_state": "generated",
+        "checkpoint": "pending_review",
+        "generation": {"status": "success", "output_path": "outputs/runtime/test.png"},
+    }
+    checkpoint, export, stop = app._button_updates(None, state)
+    assert checkpoint["interactive"] is True
+    assert export["interactive"] is False
+    assert stop["interactive"] is False
+
+    approved_state = {**state, "checkpoint": "approved"}
+    checkpoint, export, stop = app._button_updates(None, approved_state)
+    assert checkpoint["interactive"] is False
+    assert export["interactive"] is True
+    assert stop["interactive"] is False
 
 
 def test_prompt_with_controls_does_not_duplicate_prompt() -> None:

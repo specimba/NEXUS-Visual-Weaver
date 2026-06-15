@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import hashlib
+import secrets
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -47,6 +48,17 @@ DEFAULT_PROMPT = (
 )
 
 MODEL_RELAY = WeaverModelRelay()
+
+STYLE_MODIFIERS = {
+    "Balanced": "balanced editorial lighting, precise garment detail, clean composition",
+    "High Fashion": "haute couture editorial styling, premium material finish, runway-grade silhouette",
+    "Cinematic": "cinematic rain-lit atmosphere, dramatic lensing, high contrast neon reflections",
+}
+
+ASPECT_DIMENSIONS = {
+    "Square": (1024, 1024),
+    "Portrait": (832, 1216),
+}
 
 
 def _default_operator_state() -> dict[str, Any]:
@@ -194,6 +206,9 @@ def _creator_controls(
     palette: str | None = None,
     hardware: str | None = None,
     locate_focus: list[str] | None = None,
+    seed: int | None = None,
+    style_strength: str = "High Fashion",
+    aspect: str = "Portrait",
 ) -> dict[str, Any]:
     """
     Create a control object combining wardrobe selections with generation policy and reasoning configuration.
@@ -220,8 +235,30 @@ def _creator_controls(
             "flux_primary": "black-forest-labs/FLUX.2-klein-9B",
             "flux_sidecar": "black-forest-labs/FLUX.2-klein-4B",
             "lora_policy": "attempt compatible runtime adapter; report loaded/skipped/failed",
+            "seed": seed,
+            "style_strength": style_strength,
+            "aspect": aspect,
         },
     }
+
+
+def _resolve_seed(seed_value: Any) -> int:
+    """Resolve user seed input. Empty or -1 means randomize."""
+    try:
+        if seed_value is None or str(seed_value).strip() == "":
+            return secrets.randbelow(1_000_000_000)
+        seed = int(float(seed_value))
+    except (TypeError, ValueError):
+        return secrets.randbelow(1_000_000_000)
+    return secrets.randbelow(1_000_000_000) if seed < 0 else seed
+
+
+def _generation_dimensions(aspect: str | None) -> tuple[int, int]:
+    return ASPECT_DIMENSIONS.get(str(aspect or "Portrait"), ASPECT_DIMENSIONS["Portrait"])
+
+
+def _style_modifier(style_strength: str | None) -> str:
+    return STYLE_MODIFIERS.get(str(style_strength or "High Fashion"), STYLE_MODIFIERS["High Fashion"])
 
 
 def _prompt_with_controls(prompt: str, controls: dict[str, Any]) -> str:
@@ -247,7 +284,12 @@ def _prompt_with_controls(prompt: str, controls: dict[str, Any]) -> str:
         wardrobe.get("hardware"),
     ]
     suffix = ", ".join(str(item) for item in additions if item)
-    return f"{prompt}\nWardrobe controls: {suffix}" if suffix else prompt
+    generation = controls.get("generation", {})
+    if not suffix and not generation:
+        return prompt
+    style = _style_modifier(str(generation.get("style_strength", "High Fashion")))
+    prompt = f"{prompt}\nWardrobe controls: {suffix}" if suffix else prompt
+    return f"{prompt}\nStyle direction: {style}"
 
 
 def _generated_output_path(operator_state: dict[str, Any] | None) -> str | None:
@@ -312,6 +354,18 @@ def _wardrobe_summary(run: Any) -> str:
 SECTIONS = ["Forge", "Wardrobe", "Lore", "Models", "Security", "Runs"]
 
 
+def _button_updates(run: Any | None, operator_state: dict[str, Any] | None) -> tuple[Any, Any, Any]:
+    state = operator_state or {}
+    generated = bool(_generated_output_path(state)) and (state.get("generation") or {}).get("status") == "success"
+    checkpoint_approved = state.get("checkpoint") == "approved"
+    exported = state.get("provider_state") == "exported"
+    return (
+        gr.update(interactive=generated and not checkpoint_approved and not exported),
+        gr.update(interactive=generated and checkpoint_approved and not exported),
+        gr.update(interactive=False),
+    )
+
+
 def _dashboard_regions(
     run: Any | None = None,
     adult_mode: bool = False,
@@ -344,6 +398,9 @@ def run_weave(
     palette: str | None = None,
     hardware: str | None = None,
     reference_url: str | None = None,
+    seed_value: Any = -1,
+    style_strength: str = "High Fashion",
+    aspect: str = "Portrait",
 ) -> tuple[Any, ...]:
     """
     Execute the complete weaving workflow from prompt through image generation and evaluation.
@@ -354,6 +411,8 @@ def run_weave(
         Tuple containing dashboard region HTML fragments (topbar, command_rail, workflow, operations, inspector, drawer, status, artifacts, providers), catalog HTML, run data, catalog summary, scan results, operator state with generation details and judge evidence, and button state updates.
     """
     prompt = prompt.strip() or DEFAULT_PROMPT
+    resolved_seed = _resolve_seed(seed_value)
+    width, height = _generation_dimensions(aspect)
     controls = _creator_controls(
         reasoning_mode=reasoning_mode,
         video_preset=video_preset,
@@ -363,6 +422,9 @@ def run_weave(
         footwear=footwear,
         palette=palette,
         hardware=hardware,
+        seed=resolved_seed,
+        style_strength=style_strength,
+        aspect=aspect,
     )
     controlled_prompt = _prompt_with_controls(prompt, controls)
     reference_scan = scan_file(_file_path(upload))
@@ -377,7 +439,9 @@ def run_weave(
     )
     generation = generate_flux_image(
         run.refined_prompt.refined,
-        seed=_checkpoint_seed(run.checkpoint.checkpoint_id),
+        seed=resolved_seed,
+        width=width,
+        height=height,
         adult_mode=adult_mode,
     )
     generated_scan = scan_file(generation.output_path) if generation.output_path else scan_file(None)
@@ -392,14 +456,17 @@ def run_weave(
         run_packet=run.to_dict(),
         minicpm_result=minicpm.to_dict(),
     )
-    provider_state = generation.provider_state if generation.status in {"success", "error", "missing_runtime", "no_cuda"} else "checkpointed"
     if generation.status == "success":
         provider_state = "generated"
+    elif generation.status in {"disabled", "missing_runtime", "no_cuda", "error"}:
+        provider_state = generation.provider_state
+    else:
+        provider_state = "checkpointed"
     operator_state = {
         "provider_state": provider_state,
         "checkpoint": "pending_review",
         "export": generated_scan.get("export_gate", "pending"),
-        "message": generation.message or "Run packet generated. Human checkpoint required before provider promotion or export.",
+        "message": generation.message or "Image run complete. Human checkpoint required before export.",
         "generation": generation.to_dict(),
         "creator_controls": controls,
         "reference_metadata": reference_metadata,
@@ -433,7 +500,7 @@ def run_weave(
         run,
         generated_scan,
         operator_state,
-        gr.update(interactive=True),
+        *_button_updates(run, operator_state),
     )
 
 
@@ -545,7 +612,7 @@ def _render_stateful(
         catalog_summary(adult_mode),
         scan,
         operator_state,
-        gr.update(interactive=run is not None and operator_state.get("provider_state") not in {"idle", "stopped", "exported"}),
+        *_button_updates(run, operator_state),
     )
 
 
@@ -613,7 +680,7 @@ def approve_checkpoint(
     state = operator_state or _default_operator_state()
     scan = _authoritative_generated_scan(state)
     if run is None:
-        next_state = {**_default_operator_state(), "provider_state": "blocked", "message": "No run exists yet. Run Active Weave first."}
+        next_state = {**_default_operator_state(), "provider_state": "blocked", "message": "No run exists yet. Generate an image first."}
     elif not _generated_output_path(state):
         next_state = {
             **state,
@@ -632,7 +699,7 @@ def approve_checkpoint(
             "message": (
                 "Checkpoint approved. Export is ready after clear ST3GG scan."
                 if export_state == "clear"
-                else "Checkpoint approved. ST3GG is not clear; add an override reason and click Prepare Export Packet to write an audit packet."
+                else "Checkpoint approved. Add an override reason and click Prepare Audit Export to write an audit packet."
             ),
         }
     return _render_stateful(run, adult_mode, scan, active_section, next_state)
@@ -670,11 +737,11 @@ def export_packet(
     scan = _authoritative_generated_scan(state)
     override_reason = (override_reason or "").strip()
     if run is None:
-        next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export gate active: run an active weave before preparing an export packet."}
+        next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export waits for review: generate an image before preparing an audit packet."}
     elif state.get("checkpoint") != "approved":
         next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export gate active: approve the human checkpoint before release."}
     elif not _generated_output_path(state):
-        next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export gate active: generate an artifact before preparing evidence."}
+        next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export waits for review: generate an artifact before preparing evidence."}
     elif scan.get("export_gate") != "clear" and not override_reason:
         next_state = {**state, "provider_state": "blocked", "export": scan.get("export_gate", "blocked"), "message": "Export gate active: ST3GG is not clear. Add an explicit override reason to write an audit packet."}
     else:
@@ -716,7 +783,7 @@ def stop_provider_job(
     next_state = {
         **(operator_state or _default_operator_state()),
         "provider_state": "stopped",
-        "message": "Provider handoff stopped. Local dry-run packet and evidence remain available.",
+        "message": "Provider handoff stopped. Local run packet and evidence remain available.",
     }
     return _render_stateful(run, adult_mode, scan, active_section, next_state)
 
@@ -752,6 +819,8 @@ def reset_demo(
         scan,
         operator_state,
         gr.update(interactive=False),
+        gr.update(interactive=False),
+        gr.update(interactive=False),
     )
 
 
@@ -762,114 +831,116 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
     active_run_state = gr.State(None)
     scan_state = gr.State(scan_file(None))
     operator_state = gr.State(initial_operator_state)
-    topbar_html = gr.HTML(initial_regions["topbar"], container=False)
+    topbar_html = gr.HTML(initial_regions["topbar"], container=False, visible=False)
 
-    with gr.Group(elem_id="nw-inputs", elem_classes=["nw-control-panel"]):
-        gr.HTML(render_command_header(), container=False)
-        with gr.Row():
+    with gr.Row(elem_id="nw-creator-workbench", elem_classes=["nw-creator-workbench"]):
+        with gr.Column(scale=5, min_width=520, elem_id="nw-creator-panel"):
+            gr.Markdown("### Create Couture Image")
+            gr.Markdown("Describe the look, choose wardrobe controls, then generate. Reference upload is optional.")
             prompt = gr.Textbox(
                 value=DEFAULT_PROMPT,
-                label="Creative Brief",
-                lines=3,
+                label="Describe the look",
+                lines=4,
                 max_lines=6,
-                scale=5,
             )
-            with gr.Column(scale=2):
-                reasoning_mode = gr.Radio(
-                    ["Strict", "Frontier"],
-                    value="Strict",
-                    label="Reasoning Mode",
-                )
-                video_preset = gr.Dropdown(
-                    ["Wan2.2 I2V", "LTX-2.3"],
-                    value="Wan2.2 I2V",
-                    label="Video Path Preset",
-                )
-        with gr.Row():
-            silhouette = gr.Dropdown(
-                ["structured long coat", "fitted gothic bodice", "layered tactical silhouette"],
-                value="structured long coat",
-                label="Silhouette",
-            )
-            outerwear = gr.Dropdown(
-                ["black patent leather long coat", "faux fur collar coat", "tailored rain slicker"],
-                value="black patent leather long coat",
-                label="Outerwear",
-            )
-            upper_body = gr.Dropdown(
-                ["Chantilly lace neckline", "black mesh layer", "structured corset bodice"],
-                value="Chantilly lace neckline",
-                label="Upper Body",
-            )
-            footwear = gr.Dropdown(
-                ["platform boots", "patent leather heels", "armored couture boots"],
-                value="platform boots",
-                label="Footwear",
-            )
-        with gr.Row():
-            palette = gr.Dropdown(
-                ["black, crimson, cyan neon", "obsidian, pearl, crimson", "graphite, magenta, cold blue"],
-                value="black, crimson, cyan neon",
-                label="Palette",
-            )
-            hardware = gr.Dropdown(
-                ["crimson hardware", "silver occult buckles", "holographic NEXUS sigils"],
-                value="crimson hardware",
-                label="Hardware",
-            )
-            reference_url = gr.Textbox(
-                label="Reference URL (metadata only)",
-                placeholder="https://shop.example/reference-garment",
-                scale=2,
-            )
-        with gr.Row():
-            adult_mode = gr.Checkbox(
-                value=False,
-                label="Adult Mode 18+ catalog scope",
-                info="Off by default. Enables adult-tagged catalog entries but does not disable security, consent, or export gates.",
-                scale=2,
-            )
-            run_btn = gr.Button("Run Active Weave", variant="primary", scale=2)
-            checkpoint_btn = gr.Button("Approve Checkpoint", scale=1)
-            export_btn = gr.Button("Prepare Export Packet", scale=1)
-            reset_btn = gr.Button("Reset Demo State", scale=1)
-        with gr.Row(elem_id="nw-operator-actions", elem_classes=["nw-operator-actions"]):
-            stop_btn = gr.Button("Stop Provider Job", variant="stop", interactive=False, scale=1)
-        with gr.Accordion("Optional ST3GG file/reference scan", open=False):
-            gr.Markdown("Upload only when you want ST3GG to inspect an external reference or output file. Generation does not require an upload.")
-            upload = gr.File(
-                label="Optional file for ST3GG scan",
-                file_count="single",
-                type="filepath",
-            )
-            scan_btn = gr.Button("Scan Uploaded File", scale=1)
-        override_reason = gr.Textbox(
-            label="ST3GG Override Reason",
-            placeholder="Required when ST3GG is review/blocked; explain why this audit packet may be written.",
-            lines=2,
-            max_lines=3,
-        )
 
-    with gr.Row(elem_id="nw-workspace", elem_classes=["nw-workspace"]):
-        with gr.Column(scale=1, min_width=150, elem_id="nw-native-rail"):
-            section_nav = gr.Radio(
-                SECTIONS,
-                value="Forge",
-                label="Command Rail",
-                elem_id="nw-section-nav",
-            )
-            command_rail_html = gr.HTML(initial_regions["command_rail"], container=False)
-        with gr.Column(scale=5, min_width=620, elem_id="nw-main-column"):
+            with gr.Row():
+                seed_value = gr.Number(value=-1, precision=0, label="Seed (-1 randomizes)")
+                style_strength = gr.Dropdown(
+                    ["Balanced", "High Fashion", "Cinematic"],
+                    value="High Fashion",
+                    label="Style Strength",
+                )
+                aspect = gr.Dropdown(["Portrait", "Square"], value="Portrait", label="Aspect")
+            with gr.Row(elem_classes=["nw-primary-actions"]):
+                run_btn = gr.Button("Generate Image", variant="primary", scale=2)
+                reset_btn = gr.Button("Reset", scale=1)
+
+            with gr.Row():
+                silhouette = gr.Dropdown(
+                    ["structured long coat", "fitted gothic bodice", "layered tactical silhouette"],
+                    value="structured long coat",
+                    label="Silhouette",
+                )
+                outerwear = gr.Dropdown(
+                    ["black patent leather long coat", "faux fur collar coat", "tailored rain slicker"],
+                    value="black patent leather long coat",
+                    label="Outerwear",
+                )
+            with gr.Row():
+                upper_body = gr.Dropdown(
+                    ["Chantilly lace neckline", "black mesh layer", "structured corset bodice"],
+                    value="Chantilly lace neckline",
+                    label="Upper Body",
+                )
+                footwear = gr.Dropdown(
+                    ["platform boots", "patent leather heels", "armored couture boots"],
+                    value="platform boots",
+                    label="Footwear",
+                )
+            with gr.Row():
+                palette = gr.Dropdown(
+                    ["black, crimson, cyan neon", "obsidian, pearl, crimson", "graphite, magenta, cold blue"],
+                    value="black, crimson, cyan neon",
+                    label="Palette",
+                )
+                hardware = gr.Dropdown(
+                    ["crimson hardware", "silver occult buckles", "holographic NEXUS sigils"],
+                    value="crimson hardware",
+                    label="Hardware",
+                )
+
+            with gr.Accordion("Advanced: scan external file", open=False):
+                gr.Markdown("Optional. Generate directly unless you need ST3GG to inspect an uploaded reference or output file.")
+                with gr.Row():
+                    reasoning_mode = gr.Radio(["Strict", "Frontier"], value="Strict", label="Reasoning Mode")
+                    video_preset = gr.Dropdown(["Wan2.2 I2V", "LTX-2.3"], value="Wan2.2 I2V", label="Video preset (deferred)")
+                with gr.Row():
+                    adult_mode = gr.Checkbox(
+                        value=False,
+                        label="Adult Mode 18+ catalog scope",
+                        info="Off by default. Never disables security, consent, or export gates.",
+                    )
+                    reference_url = gr.Textbox(
+                        label="Reference URL (metadata only)",
+                        placeholder="https://shop.example/reference-garment",
+                    )
+                upload = gr.File(label="Optional file for ST3GG scan", file_count="single", type="filepath")
+                with gr.Row():
+                    scan_btn = gr.Button("Scan Uploaded File", scale=1)
+                    stop_btn = gr.Button("Stop Job", variant="stop", interactive=False, scale=1)
+
+        with gr.Column(scale=4, min_width=460, elem_id="nw-output-panel"):
+            gr.Markdown("### Output")
             artifact_html = gr.HTML(initial_regions["artifacts"], container=False)
-            workflow_html = gr.HTML(initial_regions["workflow"], container=False)
-            operations_html = gr.HTML(initial_regions["operations"], container=False)
-            drawer_html = gr.HTML(initial_regions["drawer"], container=False)
-        with gr.Column(scale=2, min_width=340, elem_id="nw-side-column"):
-            inspector_html = gr.HTML(initial_regions["inspector"], container=False)
-            with gr.Accordion("Optional provider lanes", open=False):
-                provider_html = gr.HTML(initial_regions["providers"], container=False)
+            with gr.Row(elem_id="nw-checkpoint-actions", elem_classes=["nw-checkpoint-actions"]):
+                checkpoint_btn = gr.Button("Approve Checkpoint", scale=1, interactive=False)
+                export_btn = gr.Button("Prepare Audit Export", scale=1, interactive=False)
+            override_reason = gr.Textbox(
+                label="ST3GG Override Reason",
+                placeholder="Required only when ST3GG asks for review; explain why this audit packet may be written.",
+                lines=2,
+                max_lines=3,
+            )
+            gr.Markdown("Generation is not export. Every artifact stays behind ST3GG review and human checkpoint.")
 
-    status_html = gr.HTML(initial_regions["status"], container=False)
+    with gr.Accordion("Run Anatomy", open=False):
+        with gr.Row(elem_id="nw-workspace", elem_classes=["nw-workspace"]):
+            with gr.Column(scale=1, min_width=160, elem_id="nw-native-rail"):
+                section_nav = gr.Radio(SECTIONS, value="Forge", label="Technical Section", elem_id="nw-section-nav")
+                command_rail_html = gr.HTML(initial_regions["command_rail"], container=False)
+            with gr.Column(scale=5, min_width=620, elem_id="nw-main-column"):
+                workflow_html = gr.HTML(initial_regions["workflow"], container=False)
+
+    with gr.Accordion("Wardrobe Evidence", open=False):
+        operations_html = gr.HTML(initial_regions["operations"], container=False)
+        drawer_html = gr.HTML(initial_regions["drawer"], container=False)
+
+    with gr.Accordion("Technical Evidence", open=False):
+        status_html = gr.HTML(initial_regions["status"], container=False)
+        inspector_html = gr.HTML(initial_regions["inspector"], container=False)
+        with gr.Accordion("Provider Diagnostics", open=False):
+            provider_html = gr.HTML(initial_regions["providers"], container=False)
 
     with gr.Accordion("Catalog, run record, and security evidence", open=False):
         catalog_html = gr.HTML(render_catalog_table(False), container=False)
@@ -894,13 +965,30 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
         scan_json,
     ]
 
-    stateful_outputs = dashboard_outputs + [active_run_state, scan_state, operator_state, stop_btn]
+    stateful_outputs = dashboard_outputs + [active_run_state, scan_state, operator_state, checkpoint_btn, export_btn, stop_btn]
 
-    operator_outputs = dashboard_outputs + [operator_state, stop_btn]
+    operator_outputs = dashboard_outputs + [operator_state, checkpoint_btn, export_btn, stop_btn]
 
     run_click = run_btn.click(
         fn=run_weave,
-        inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav, silhouette, outerwear, upper_body, footwear, palette, hardware, reference_url],
+        inputs=[
+            prompt,
+            reasoning_mode,
+            video_preset,
+            adult_mode,
+            upload,
+            section_nav,
+            silhouette,
+            outerwear,
+            upper_body,
+            footwear,
+            palette,
+            hardware,
+            reference_url,
+            seed_value,
+            style_strength,
+            aspect,
+        ],
         outputs=stateful_outputs,
         api_name="run_active_weave",
         concurrency_limit=1,
@@ -908,7 +996,24 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
     )
     run_submit = prompt.submit(
         fn=run_weave,
-        inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav, silhouette, outerwear, upper_body, footwear, palette, hardware, reference_url],
+        inputs=[
+            prompt,
+            reasoning_mode,
+            video_preset,
+            adult_mode,
+            upload,
+            section_nav,
+            silhouette,
+            outerwear,
+            upper_body,
+            footwear,
+            palette,
+            hardware,
+            reference_url,
+            seed_value,
+            style_strength,
+            aspect,
+        ],
         outputs=stateful_outputs,
         api_name=False,
         concurrency_limit=1,
@@ -942,7 +1047,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
     scan_btn.click(
         fn=scan_reference,
         inputs=[active_run_state, adult_mode, upload, section_nav, operator_state, reference_url],
-        outputs=dashboard_outputs + [operator_state, stop_btn, scan_state],
+        outputs=dashboard_outputs + [operator_state, checkpoint_btn, export_btn, stop_btn, scan_state],
         api_name="scan_reference",
         queue=False,
     )

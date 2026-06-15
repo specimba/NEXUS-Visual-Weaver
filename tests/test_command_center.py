@@ -153,12 +153,11 @@ def test_dashboard_regions_expose_artifacts_and_provider_cards() -> None:
         relay_status=relay.dashboard_snapshot(public_demo=True),
     )
 
-    assert "Artifact Preview Lane" in regions["artifacts"]
+    assert "Output" in regions["artifacts"]
     assert "nw-preview-stage" in regions["artifacts"]
-    assert "nw-preview-ribbon" in regions["artifacts"]
     assert "PRIMARY OUTPUT STAGE" in regions["artifacts"]
     assert "JUDGE-SAFE DEMO OUTPUT" in regions["artifacts"]
-    assert "state: dry-run / configured / gated / failed" in regions["artifacts"]
+    assert "Generate an image to unlock checkpoint review." in regions["artifacts"]
     assert "Forge Operations" in regions["operations"]
     assert "Optional Provider Lanes" in regions["providers"]
     assert "nw-provider-meter" in regions["providers"]
@@ -185,7 +184,7 @@ def test_dashboard_regions_render_with_empty_relay_and_default_scan() -> None:
     assert "not-started" in regions["operations"]
     assert "snapshot pending" in regions["providers"]
     assert "Selected: Forge" in regions["command_rail"]
-    assert "provider call remains checkpointed" in regions["artifacts"]
+    assert "Real output and export evidence appear here" in regions["artifacts"]
 
 
 def test_dashboard_operations_follow_selected_section() -> None:
@@ -265,8 +264,8 @@ def test_render_trust_strip_defaults_to_idle_state() -> None:
 
     assert "TRUST MODEL" in html
     assert "Generation is not export." in html
-    assert "ST3GG IDLE" in html
-    assert "EXPORT PENDING" in html
+    assert "ST3GG READY" in html
+    assert "Export waits for review" in html
     assert "Clean PNG -> pass." in html
     assert "FIXTURE EVIDENCE" in html
 

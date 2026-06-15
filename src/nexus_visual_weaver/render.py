@@ -77,6 +77,8 @@ def _gate_label(export_gate: str) -> str:
         return "Export Blocked - Override Available"
     if normalized == "CLEAR":
         return "EXPORT CLEAR"
+    if normalized == "PENDING":
+        return "Export waits for review"
     return f"EXPORT {normalized}"
 
 
@@ -214,6 +216,7 @@ def render_trust_strip(scan: dict | None = None, operator_state: dict | None = N
     scan = scan or {"status": "idle", "export_gate": "pending", "findings": [], "purification_actions": []}
     operator_state = operator_state or {}
     status = str(scan.get("status", "idle")).upper()
+    status_label = "READY" if status == "IDLE" else status
     export_gate = str(scan.get("export_gate", "pending")).upper()
     checkpoint = str(operator_state.get("checkpoint", "pending")).replace("_", " ").title()
     raw_findings = scan.get("findings")
@@ -236,7 +239,7 @@ def render_trust_strip(scan: dict | None = None, operator_state: dict | None = N
         <strong>Generation is not export.</strong>
         <span>Every artifact must pass ST3GG scan, purification, and human checkpoint before release.</span>
       </div>
-      <div class="nw-trust-card">{badge(f"ST3GG {status}", tone)}<span>{escape(str(findings[0]))}</span></div>
+      <div class="nw-trust-card">{badge(f"ST3GG {status_label}", tone)}<span>{escape(str(findings[0]))}</span></div>
       <div class="nw-trust-card">{badge(_gate_label(export_gate), "pass" if export_gate == "CLEAR" else "warn" if export_gate == "BLOCKED" else "muted")}<span>{escape(str(actions[0]))}</span></div>
       <div class="nw-trust-card">{badge(f"CHECKPOINT {checkpoint.upper()}", "pass" if checkpoint == "Approved" else "muted")}<span>Adult Mode never bypasses safety, consent, provenance, or dataset gates.</span></div>
       <div class="nw-trust-card nw-trust-examples">{badge("FIXTURE EVIDENCE", "cyan")}<span>Clean PNG -> pass. PNG trailing bytes -> blocked.</span></div>
@@ -493,17 +496,14 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
     """
     scan = scan or {"status": "idle", "export_gate": "pending"}
     operator_state = operator_state or {}
-    prompt_label = "Prompt proof"
-    outfit_label = "Outfit map"
-    locate_label = "Grounding overlay"
-    video_label = run.video.preset if run else "Video path"
-    active_prompt = run.refined_prompt.refined[:150] if run else "Awaiting first weave. Real output and export evidence appear here after generation."
+    active_prompt = run.refined_prompt.refined[:150] if run else "Describe the look and click Generate Image."
     checkpoint = operator_state.get("checkpoint", getattr(run.checkpoint, "recommendation", "pending") if run else "pending")
     provider_state = str(operator_state.get("provider_state", "dry-run" if run else "idle"))
     generation = operator_state.get("generation") or {}
     generated_uri = _image_data_uri(generation.get("output_path")) if isinstance(generation, dict) else None
     generated_status = str(generation.get("status", "")) if isinstance(generation, dict) else ""
     generated_message = str(generation.get("message", "")) if isinstance(generation, dict) else ""
+    output_ready = bool(generated_uri)
     preview_mode = {
         "idle": "Idle",
         "dry-run": "Dry Run",
@@ -512,32 +512,22 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
         "exported": "Exported",
         "blocked": "Export Gate Active",
         "stopped": "Stopped",
+        "generated": "Generated",
     }.get(provider_state, provider_state.replace("_", " ").title())
     demo_seed = (run.checkpoint.checkpoint_id[-4:] if run else "0000").upper()
-    artifacts = [
-        (prompt_label, "Taste-refined brief", "dry-run", "material-0", "01"),
-        (outfit_label, "Wardrobe slots and locks", "checkpointed", "material-1", "02"),
-        (locate_label, "LocateAnything region plan", "configured", "material-4", "03"),
-        (video_label, "Checkpointed storyboard", "deferred" if scan.get("export_gate") == "blocked" or provider_state == "blocked" else "ready", "story-2", "04"),
-    ]
-    cards = "".join(
-        f"""
-        <div class="nw-artifact-card">
-          <small>{escape(index)}</small>
-          <i class="nw-{texture}"></i>
-          <strong>{escape(title)}</strong>
-          <span>{escape(body)}</span>
-          {badge("Gated" if status == "deferred" else status.upper(), "warn" if status in {"blocked", "deferred"} else "muted")}
-        </div>
-        """
-        for title, body, status, texture, index in artifacts
-    )
     export_gate = str(scan.get("export_gate", "pending")).upper()
-    continuity = ", ".join(run.video.continuity_locks[:4]) if run else "outerwear, footwear, jewelry, NEXUS sigils"
+    checkpoint_label = str(checkpoint).replace("_", " ").title()
+    next_action = "Generate an image to unlock checkpoint review."
+    if output_ready and str(checkpoint) != "approved":
+        next_action = "Approve checkpoint to unlock audit export."
+    elif output_ready and str(checkpoint) == "approved" and export_gate != "CLEAR":
+        next_action = "Add override reason or complete ST3GG review, then prepare audit export."
+    elif output_ready and str(checkpoint) == "approved":
+        next_action = "Prepare audit export."
     return f"""
     <section class="nw-panel nw-artifacts">
       <div class="nw-panel-head">
-        <div><strong>Artifact Preview Lane</strong><small>Real output and export evidence appear here</small></div>
+        <div><strong>{'Generated image ready' if output_ready else 'Output'}</strong><small>Real output and export evidence appear here</small></div>
         {badge(_gate_label(export_gate), "warn" if export_gate == "BLOCKED" else "pass" if export_gate == "CLEAR" else "muted")}
       </div>
       <div class="nw-preview-stage">
@@ -545,22 +535,21 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
           {'<img class="nw-preview-real-image" src="' + generated_uri + '" alt="Generated FLUX artifact" />' if generated_uri else '<i class="nw-preview-image"></i>'}
           <div class="nw-preview-caption">
             <small>PRIMARY OUTPUT STAGE / {escape(generated_status.upper() or "JUDGE-SAFE DEMO OUTPUT")} / SEED {escape(demo_seed)}</small>
-            <strong>{'Real FLUX.2 Klein artifact' if generated_uri else 'Deterministic Raven Chronicle proof frame'}</strong>
+            <strong>{'Real FLUX.2 Klein artifact' if generated_uri else 'No image generated yet'}</strong>
             <span>{escape(generated_message or active_prompt)}</span>
           </div>
         </div>
         <div class="nw-preview-meta">
-          <div><small>checkpoint</small><strong>{escape(str(checkpoint).replace("_", " ").title())}</strong></div>
-          <div><small>export gate</small><strong>{escape(export_gate)}</strong></div>
-          <div><small>preview mode</small><strong>{escape(preview_mode)}</strong></div>
+          <div><small>Output</small><strong>{'Ready' if output_ready else 'Waiting'}</strong></div>
+          <div><small>Checkpoint</small><strong>{escape(checkpoint_label)}</strong></div>
+          <div><small>Export</small><strong>{escape(_gate_label(export_gate))}</strong></div>
         </div>
       </div>
-      <div class="nw-preview-ribbon">
-        <span>{icon("security")} ST3GG before export</span>
-        <span>{icon("wardrobe")} continuity: {escape(continuity)}</span>
-        <span>{icon("models")} provider call remains checkpointed; state: dry-run / configured / gated / failed / exported; current: {escape(_display_state(provider_state))}</span>
+      <div class="nw-run-summary">
+        <div><small>Current state</small><strong>{escape(preview_mode)}</strong></div>
+        <div><small>Security</small><strong>ST3GG review active</strong></div>
+        <div><small>Next action</small><strong>{escape(next_action)}</strong></div>
       </div>
-      <div class="nw-artifact-grid">{cards}</div>
     </section>
     """
 
