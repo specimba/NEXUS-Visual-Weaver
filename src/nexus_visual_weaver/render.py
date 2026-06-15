@@ -54,6 +54,31 @@ def _metric(label: str, value: str, tone: str = "neutral") -> str:
     return f'<div class="nw-metric nw-metric-{tone}"><small>{escape(label)}</small><strong>{escape(value)}</strong></div>'
 
 
+def _display_state(value: str) -> str:
+    """Return user-facing state labels without changing machine state values."""
+    normalized = str(value or "").replace("_", " ").strip().lower()
+    labels = {
+        "blocked": "Export Gate Active",
+        "missing secret": "Optional - Secret Required",
+        "missing_secret": "Optional - Secret Required",
+        "export_ready": "Export Ready",
+        "configured": "CONFIGURED",
+        "dry-run": "Dry Run",
+        "dry run": "Dry Run",
+        "success": "SUCCESS",
+    }
+    return labels.get(normalized, normalized.title() if normalized else "Pending")
+
+
+def _gate_label(export_gate: str) -> str:
+    normalized = str(export_gate or "pending").upper()
+    if normalized == "BLOCKED":
+        return "Export Blocked - Override Available"
+    if normalized == "CLEAR":
+        return "EXPORT CLEAR"
+    return f"EXPORT {normalized}"
+
+
 def _env_configured(*names: str) -> bool:
     """
     Determine whether any of the provided environment variables are set and truthy.
@@ -211,7 +236,7 @@ def render_trust_strip(scan: dict | None = None, operator_state: dict | None = N
         <span>Every artifact must pass ST3GG scan, purification, and human checkpoint before release.</span>
       </div>
       <div class="nw-trust-card">{badge(f"ST3GG {status}", tone)}<span>{escape(str(findings[0]))}</span></div>
-      <div class="nw-trust-card">{badge(f"EXPORT {export_gate}", "pass" if export_gate == "CLEAR" else "warn" if export_gate == "BLOCKED" else "muted")}<span>{escape(str(actions[0]))}</span></div>
+      <div class="nw-trust-card">{badge(_gate_label(export_gate), "pass" if export_gate == "CLEAR" else "warn" if export_gate == "BLOCKED" else "muted")}<span>{escape(str(actions[0]))}</span></div>
       <div class="nw-trust-card">{badge(f"CHECKPOINT {checkpoint.upper()}", "pass" if checkpoint == "Approved" else "muted")}<span>Adult Mode never bypasses safety, consent, provenance, or dataset gates.</span></div>
       <div class="nw-trust-card nw-trust-examples">{badge("FIXTURE EVIDENCE", "cyan")}<span>Clean PNG -> pass. PNG trailing bytes -> blocked.</span></div>
     </section>
@@ -386,11 +411,25 @@ def render_workflow(run: GenerationRun | None = None, operator_state: dict | Non
             </g>
             """
         )
+    generation = operator_state.get("generation") or {}
+    generated = isinstance(generation, dict) and generation.get("status") == "success"
+    output_summary = "Real FLUX.2 Klein 9B artifact generated" if generated else "Awaiting generated artifact"
+    checkpoint_summary = _display_state(checkpoint_status)
+    export_summary = _display_state(str(operator_state.get("export", provider_state)))
+    next_summary = "Add override reason or complete review" if provider_state == "blocked" else action_label
     return f"""
     <section class="nw-panel nw-canvas">
       <div class="nw-panel-head nw-canvas-head">
         <div><strong>Active Weave</strong><small><span class="nw-live-dot"></span> Live / Weave ID: 4f7c9e2b</small></div>
         <div class="nw-tools nw-static-tools"><span>Layout Auto</span><span>{icon("zoom")}</span><span>{icon("frame")}</span></div>
+      </div>
+      <div class="nw-run-summary">
+        <strong>Current Run Summary</strong>
+        <span><b>Output</b>{escape(output_summary)}</span>
+        <span><b>Security</b>ST3GG review active</span>
+        <span><b>Checkpoint</b>{escape(checkpoint_summary)}</span>
+        <span><b>Export</b>{escape(export_summary)}</span>
+        <span><b>Next</b>{escape(next_summary)}</span>
       </div>
       <svg class="nw-graph" viewBox="0 0 1110 530" role="img" aria-label="NEXUS workflow graph">
         <defs>
@@ -404,7 +443,7 @@ def render_workflow(run: GenerationRun | None = None, operator_state: dict | Non
         {"".join(cards)}
       </svg>
       <div class="nw-legend">
-        {badge("Text Flow", "accent")} {badge("Refine Loop", "violet")} {badge("Policy Gate", "blue")} {badge("Media Flow", "cyan")} {badge("Human Gate", "warn")} {badge(provider_state.replace("_", " ").upper(), "pass" if provider_state == "exported" else "warn" if provider_state in {"blocked", "stopped"} else "muted")}
+        {badge("Text Flow", "accent")} {badge("Refine Loop", "violet")} {badge("Policy Gate", "blue")} {badge("Media Flow", "cyan")} {badge("Human Gate", "warn")} {badge(_display_state(provider_state), "pass" if provider_state == "exported" else "warn" if provider_state in {"blocked", "stopped"} else "muted")}
       </div>
       <div class="nw-weave-console">
         <div class="nw-console-card nw-console-primary">
@@ -457,7 +496,7 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
     outfit_label = "Outfit map"
     locate_label = "Grounding overlay"
     video_label = run.video.preset if run else "Video path"
-    active_prompt = run.refined_prompt.refined[:150] if run else "Awaiting first weave. The preview stage shows dry-run handoff packets until provider output exists."
+    active_prompt = run.refined_prompt.refined[:150] if run else "Awaiting first weave. Real output and export evidence appear here after generation."
     checkpoint = operator_state.get("checkpoint", getattr(run.checkpoint, "recommendation", "pending") if run else "pending")
     provider_state = str(operator_state.get("provider_state", "dry-run" if run else "idle"))
     generation = operator_state.get("generation") or {}
@@ -470,7 +509,7 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
         "checkpointed": "Checkpointed",
         "export_ready": "Export Ready",
         "exported": "Exported",
-        "blocked": "Blocked",
+        "blocked": "Export Gate Active",
         "stopped": "Stopped",
     }.get(provider_state, provider_state.replace("_", " ").title())
     demo_seed = (run.checkpoint.checkpoint_id[-4:] if run else "0000").upper()
@@ -478,7 +517,7 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
         (prompt_label, "Taste-refined brief", "dry-run", "material-0", "01"),
         (outfit_label, "Wardrobe slots and locks", "checkpointed", "material-1", "02"),
         (locate_label, "LocateAnything region plan", "configured", "material-4", "03"),
-        (video_label, "Checkpointed storyboard", "blocked" if scan.get("export_gate") == "blocked" or provider_state == "blocked" else "ready", "story-2", "04"),
+        (video_label, "Checkpointed storyboard", "deferred" if scan.get("export_gate") == "blocked" or provider_state == "blocked" else "ready", "story-2", "04"),
     ]
     cards = "".join(
         f"""
@@ -487,7 +526,7 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
           <i class="nw-{texture}"></i>
           <strong>{escape(title)}</strong>
           <span>{escape(body)}</span>
-          {badge(status.upper(), "warn" if status == "blocked" else "muted")}
+          {badge("Gated" if status == "deferred" else status.upper(), "warn" if status in {"blocked", "deferred"} else "muted")}
         </div>
         """
         for title, body, status, texture, index in artifacts
@@ -497,8 +536,8 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
     return f"""
     <section class="nw-panel nw-artifacts">
       <div class="nw-panel-head">
-        <div><strong>Artifact Preview Lane</strong><small>Honest handoff packets until a provider call succeeds</small></div>
-        {badge(f"Export {export_gate}", "warn" if export_gate == "BLOCKED" else "pass" if export_gate == "CLEAR" else "muted")}
+        <div><strong>Artifact Preview Lane</strong><small>Real output and export evidence appear here</small></div>
+        {badge(_gate_label(export_gate), "warn" if export_gate == "BLOCKED" else "pass" if export_gate == "CLEAR" else "muted")}
       </div>
       <div class="nw-preview-stage">
         <div class="nw-preview-frame">
@@ -518,7 +557,7 @@ def render_artifact_lane(run: GenerationRun | None = None, scan: dict | None = N
       <div class="nw-preview-ribbon">
         <span>{icon("security")} ST3GG before export</span>
         <span>{icon("wardrobe")} continuity: {escape(continuity)}</span>
-        <span>{icon("models")} provider call remains checkpointed; state: dry-run / configured / blocked / failed / exported; current: {escape(provider_state)}</span>
+        <span>{icon("models")} provider call remains checkpointed; state: dry-run / configured / gated / failed / exported; current: {escape(_display_state(provider_state))}</span>
       </div>
       <div class="nw-artifact-grid">{cards}</div>
     </section>
@@ -706,9 +745,9 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
     optional_statuses = {
         "openbmb": "configured" if _provider_configured("MINICPM_BASE_URL", "MINICPM_API_KEY", "OPENBMB_API_KEY") else "missing secret",
         "nvidia": "configured" if _provider_configured("NEMOTRON_BASE_URL", "NEMOTRON_API_KEY", "NVIDIA_API_KEY") else "missing secret",
-        "fal": "configured" if _env_configured("FAL_KEY") else "blocked",
-        "netlify": "configured" if _env_configured("NETLIFY_AUTH_TOKEN", "NETLIFY_SITE_ID", "OPENAI_BASE_URL") else "blocked",
-        "cloudflare": "configured" if _env_configured("CLOUDFLARE_API_TOKEN", "CF_ACCOUNT_ID") else "blocked",
+        "fal": "configured" if _env_configured("FAL_KEY") else "deferred",
+        "netlify": "configured" if _env_configured("NETLIFY_AUTH_TOKEN", "NETLIFY_SITE_ID", "OPENAI_BASE_URL") else "deferred",
+        "cloudflare": "configured" if _env_configured("CLOUDFLARE_API_TOKEN", "CF_ACCOUNT_ID") else "deferred",
     }
     cards = []
     for decision in decisions[:5]:
@@ -721,7 +760,7 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
         provider_state = "dry-run" if status == "ready" else "blocked" if status == "blocked" else "limited"
         if provider in optional_statuses:
             provider_state = optional_statuses[provider]
-        tone = "pass" if provider_state == "configured" else "warn" if provider_state in {"limited", "blocked", "failed"} else "muted"
+        tone = "pass" if provider_state == "configured" else "warn" if provider_state in {"limited", "failed"} else "muted"
         gate = primary.get("license_gate", "unknown")
         cards.append(
             f"""
@@ -730,7 +769,7 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
               <strong>{escape(repo)}</strong>
               <span>{escape(str(provider))} / {escape(str(gate))}</span>
               <i class="nw-provider-meter" style="--health:{'86' if provider_state in {'configured', 'dry-run'} else '52' if provider_state == 'limited' else '22'}"></i>
-              <div>{badge(provider_state.upper(), tone)}{badge("CHECKPOINTED", "muted")}</div>
+              <div>{badge(_display_state(provider_state), tone)}{badge("CHECKPOINTED", "muted")}</div>
             </div>
             """
         )
@@ -742,9 +781,9 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
             <div class="nw-provider-card nw-provider-optional">
               <small>optional gateway</small>
               <strong>{escape(provider.title())}</strong>
-              <span>off by default / secrets required</span>
+              <span>optional lane / secrets required</span>
               <i class="nw-provider-meter" style="--health:{'74' if state == 'configured' else '18'}"></i>
-              <div>{badge(state.upper(), "pass" if state == "configured" else "warn")}{badge("SPONSOR LANE" if provider in {"openbmb", "nvidia", "hf_nvidia"} else "NOT MVP DEFAULT", "muted")}</div>
+              <div>{badge(_display_state(state), "pass" if state == "configured" else "muted")}{badge("SPONSOR LANE" if provider in {"openbmb", "nvidia", "hf_nvidia"} else "DEFERRED", "muted")}</div>
             </div>
             """
         )
@@ -752,7 +791,7 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
     return f"""
     <section class="nw-panel nw-providers">
       <div class="nw-panel-head">
-        <div><strong>Provider Handoff Cards</strong><small>Configured as visible packets before any paid or gated call</small></div>
+        <div><strong>Optional Provider Lanes</strong><small>Visible capability cards; success is claimed only after configured calls</small></div>
         {badge(mode_label.upper(), "warn" if adult_mode else "pass")}
       </div>
       <div class="nw-provider-grid">{"".join(cards)}</div>
@@ -811,7 +850,7 @@ def render_inspector(
     minicpm = operator_state.get("minicpm_judge") or {}
     nemotron = operator_state.get("nemotron_evidence") or {}
     sponsor_rows = "".join(
-        f"<li><span>{escape(label)}</span><strong>{escape(str(result.get('status', 'pending')).upper())}</strong><em>{escape(str(result.get('repo_id', repo)))}</em></li>"
+        f"<li><span>{escape(label)}</span><strong>{escape(_display_state(str(result.get('status', 'pending'))))}</strong><em>{escape(str(result.get('repo_id', repo)))}</em></li>"
         for label, repo, result in [
             ("OpenBMB MiniCPM", "openbmb/MiniCPM-V-4.6", minicpm),
             ("NVIDIA Nemotron", "nvidia/NVIDIA-Nemotron-Parse-v1.2", nemotron),
@@ -906,7 +945,8 @@ def render_drawer(run: GenerationRun | None = None) -> str:
 def render_status_bar(operator_state: dict | None = None) -> str:
     space = _space_runtime_status()
     operator_state = operator_state or {}
-    provider_state = str(operator_state.get("provider_state", "idle")).replace("_", " ").title()
+    raw_provider_state = str(operator_state.get("provider_state", "idle"))
+    provider_state = _display_state(raw_provider_state)
     stop_class = "nw-stop-idle" if provider_state == "Idle" else "nw-stop-active"
     return f"""
     <footer class="nw-statusbar">

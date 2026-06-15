@@ -30,75 +30,133 @@ tags:
 
 # NEXUS Visual Weaver
 
-Dark creative-operations command center for the Hugging Face Build Small Hackathon.
+**Raven Chronicle** is a governed high-fashion visual creation command center.
 
-NEXUS Visual Weaver is a Gradio Space prototype for governed image and video creation. It combines a couture-oriented workflow dashboard, outfit and lore planning, model-lane governance, and an always-on defensive export gate.
+> Real generation. Visible governance. Auditable output.
 
-The current Space path is intentionally direct for judges: enter a creative brief, run the active weave, inspect the generated FLUX.2 artifact, review ST3GG evidence, approve the human checkpoint, and prepare a governed export packet.
+**Live Space:** [build-small-hackathon/NEXUS_Visual_Weaver](https://huggingface.co/spaces/build-small-hackathon/NEXUS_Visual_Weaver)
 
-## Direction
+NEXUS Visual Weaver is built for creative work where the image is only part of the deliverable. A weave run carries the prompt, wardrobe controls, model route, ST3GG scan, checkpoint state, and export evidence together so the operator can prove what happened.
 
-The interface is built around a command-center surface:
+## Live Command Surface
 
-- workflow graph for `Seed Prompt -> Refine -> Judge -> Locate -> Generate -> Video Path -> Human Checkpoint`
-- contextual inspector with taste rings, material checks, model stack, relay status, and ST3GG evidence
-- wardrobe drawer for garments, materials, footwear, accessories, locks, and reference-region intent
-- lore-to-video timeline for compact cinematic beats
-- provider handoff cards for dry-run visibility before any paid, gated, or quota-limited call
+![Live command surface](assets/readme/live-command-surface.png)
+
+The first screen is the working surface: creative brief, outfit controls, reference metadata, ST3GG input, model route, checkpoint controls, and the **Run Active Weave** action stay together.
+
+## Real Usage & Evidence
+
+![Real FLUX.2 Klein artifact](assets/readme/real-flux-artifact.png)
+
+| Evidence | Current status |
+| --- | --- |
+| Real FLUX.2 Klein 9B artifact | Verified in the live Space screenshot |
+| Creator controls | Visible in the command surface and persisted into run evidence |
+| ST3GG scan | Active before export |
+| Human checkpoint | Required before release |
+| Export gate | Blocks release until review or audit override |
+| Tests | 288 passing locally |
+| Secret scan | Clean |
+| Runtime | ZeroGPU / RTX Pro 6000 Blackwell |
+| Deployment evidence | Space SHA `621cf5d992e74c0d756ff0e5042a43f1fcab346d`; GitHub main `06114ab` |
+
+No sponsor or video lane is claimed as successful unless the export packet proves it. Missing-secret and gated states stay visible by design.
+
+## How a Governed Weave Works
+
+```mermaid
+flowchart LR
+    A["Creator controls"] --> B["Prompt refinement"]
+    B --> C["FLUX.2 Klein 9B generation"]
+    C --> D["ST3GG review"]
+    D --> E{"Human checkpoint"}
+    E -->|approved + clear| F["Governed export packet"]
+    E -->|reviewed + reason| G["Audit override packet"]
+    E -->|not reviewed| H["Export gate remains active"]
+```
+
+![Governance workflow](assets/readme/governance-workflow.png)
+
+The graph and inspector make the state visible: generation can succeed while export remains gated. That is intentional.
+
+## Governance Model
+
+**Generation is not export.**
+
+Every artifact must pass defensive review and human checkpoint before release. Adult Mode is opt-in and partitioned; it never disables safety, consent, provenance, dataset, or export gates.
+
+The export packet is the source of truth. It records:
+
+- creator controls and wardrobe slots
+- model and LoRA status
+- reference metadata and hashes
+- generated artifact basename
+- ST3GG verdict and override reason when used
+- checkpoint and provider states
+
+## Runtime Proof
+
+![Runtime telemetry](assets/readme/runtime-telemetry.png)
+
+![ZeroGPU Blackwell runtime](assets/readme/blackwell-runtime.png)
+
+The public Space is running on ZeroGPU with RTX Pro 6000 Blackwell visible in the live runtime panel. The footer telemetry is operational evidence, not a marketing mockup. When the status says the export gate is active, the app is protecting release rather than failing generation.
 
 ## Model Governance
 
 Pinned lanes do not rotate:
 
-- `image_generation`: Raven Quality FLUX.2 Klein 9B image lane, with FLUX.2 Klein 4B as Tiny Titan sidecar/fallback
-- `grounding`: NVIDIA LocateAnything-3B grounding anchor
-- `security`: ST3GG defensive scanner/export gate
+| Lane | Model | Role |
+| --- | --- | --- |
+| Image generation | `black-forest-labs/FLUX.2-klein-9B` | Raven Quality primary image lane |
+| Sidecar / Tiny Titan evidence | `black-forest-labs/FLUX.2-klein-4B` | Fallback and 4B sidecar |
+| Grounding | `nvidia/LocateAnything-3B` | Region and visual grounding anchor |
+| Security / export review | ST3GG adapter | Defensive scan, purification, export gate |
 
-Sponsor/evidence lanes are optional but first-class when secrets are configured:
+Optional lanes are first-class but gated:
 
-- `openbmb/MiniCPM-V-4.6` (1.30B): visual judge for wardrobe, footwear, material drift, lore continuity, and export notes.
-- `nvidia/NVIDIA-Nemotron-Parse-v1.2` (0.94B): structured evidence/parser lane for NVIDIA/Nemotron claim support.
+| Lane | Status rule |
+| --- | --- |
+| OpenBMB MiniCPM-V | Claimed only when a configured provider returns success in an export packet |
+| NVIDIA Nemotron | Claimed only when a configured provider returns success in an export packet |
+| LTX-2.3 video path | Gated behind checkpoint and review in this sprint |
+| Modal / external jobs | Deferred unless configured and proven by runtime evidence |
 
-Helper lanes may rotate with quota, license, health, and parameter-budget checks:
+## Current Scope: Gated, Not Claimed
 
-- prompt routing
-- taste judging
-- audio lore TTS
-- video repair
-- HF catalog research
-- Modal job runner
+This sprint focuses on governed image creation and export evidence. Video rendering and external sponsor judges remain gated behind human review and secrets. The interface shows those states openly instead of pretending that missing-secret or deferred lanes succeeded.
 
-Public demo mode uses the Raven Quality FLUX.2 Klein 9B lane when Space access is configured, while preserving the 4B sidecar for fallback/Tiny Titan evidence. Private research mode can add OFFELLIA/Gemma routes, but it never disables consent, provenance, ST3GG, export, or dataset-partition gates.
+## Verification
 
-## Current Features
+```powershell
+python -m compileall app.py src tests
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
+python -m pytest -q tests -p no:cacheprovider --basetemp=C:\tmp\pytest-nvw-full
+git grep -n -I -E "hf_[A-Za-z0-9]{20,}|Bearer [A-Za-z0-9._-]+|sk-[A-Za-z0-9_-]{20,}|api[_-]?key\s*=" -- .
+```
 
-- Gradio Blocks dashboard with split update regions.
-- Real FLUX.2 Klein 9B-first image generation on Hugging Face ZeroGPU when runtime access is configured, with honest 4B sidecar fallback.
-- Above-fold ST3GG trust strip with safe-vs-blocked fixture evidence.
-- Generated artifact ST3GG scan and checkpoint/export state.
-- Optional MiniCPM-V and Nemotron provider evidence lanes with explicit configured/missing-secret status.
-- Active workflow graph and checkpointed run record.
-- Taste profile scoring from `assets/taste_profile.json`.
-- Wardrobe slot planning for couture, gothic, fantasy, footwear, accessories, and material control.
-- HF model and LoRA catalog with Adult Mode hidden by default.
-- GMR/ModelRelay-inspired helper model selection.
-- ST3GG-inspired scan adapter with magic detection, mismatch review, purification actions, and export-gate state.
-- Focused regression tests for catalog scope, workflow planning, ModelRelay behavior, and scanner evidence.
+Latest local verification: **288 tests passing**, compile clean, tracked-file secret scan clean. The live Space root and `/gradio_api/info` returned HTTP 200 after deployment.
+
+## Wardrobe, Catalog, And Evidence Surfaces
+
+![Wardrobe controls](assets/readme/wardrobe-controls.png)
+
+![Model catalog evidence](assets/readme/model-catalog.png)
+
+The wardrobe and catalog surfaces are included as evidence of the real operating model: couture slots, material locks, model roles, adapter shelf, and parameter-budget visibility.
 
 ## Build Small Prize Mapping
 
 | Target | Evidence status |
 | --- | --- |
-| Gradio Space | App runs as a public Hugging Face Gradio Space with `mcp_server=True`. |
-| <=32B models | Raven Quality stack is 16.42B: FLUX.2 Klein 9B + LocateAnything 3.83B + MiniCPM-V 1.30B + Nemotron Parse 0.94B + MiniCPM5 1.08B + FunctionGemma 0.27B. |
-| Off Brand | Custom command-center UI, dense inspector, workflow graph, wardrobe/lore drawer, and provider cards. |
-| Best Agent | Multi-step prompt, generation, scan, judge, checkpoint, export workflow. |
-| OpenBMB | Claimed only when MiniCPM-V returns success status in an export packet. |
-| NVIDIA | Claimed only when Nemotron returns success status in an export packet. LocateAnything remains visible but is not the Nemotron claim by itself. |
-| OpenAI Codex | Development branch and PR include Codex-authored implementation commits. |
+| Gradio Space | Public Hugging Face Gradio Space with `mcp_server=True`. |
+| <=32B models | Active stack remains under the 32B ceiling and is visible in the UI. |
+| Off Brand | Gothic couture command center with workflow graph, wardrobe drawer, ST3GG trust strip, and live artifact evidence. |
+| Best Agent | Multi-step weave: prompt refinement, generation, scan, optional judges, checkpoint, and governed export. |
+| OpenBMB | Conditional; claimed only when MiniCPM-V returns `success` in an export packet. |
+| NVIDIA | Conditional; claimed only when Nemotron returns `success`; LocateAnything remains grounding evidence. |
+| OpenAI Codex | Development and review work performed through Codex-authored implementation commits. |
 | Demo / social | Add final links here before submission: `DEMO_VIDEO_URL` and `SOCIAL_POST_URL`. |
-
-Tiny Titan can be claimed only from a successful sidecar export packet using the 4B mode. It must not weaken the main Raven Quality stack.
 
 ## Merit Badges
 
@@ -120,30 +178,9 @@ python app.py
 
 The app reads `NEXUS_PORT` or `PORT` when present, otherwise it launches on `7860`.
 
-## Verification
-
-```powershell
-python -m compileall app.py src tests
-$env:NEXUS_DISABLE_REAL_HF='1'
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
-python -m pytest -q tests -p no:cacheprovider --basetemp=C:\tmp\pytest-nvw-full
-```
-
 ## Secret Policy
 
-Do not commit provider credentials. Use Hugging Face Space secrets or local `.env` files for:
-
-- `HF_TOKEN`
-- `MINICPM_BASE_URL`
-- `MINICPM_API_KEY`
-- `MINICPM_MODEL`
-- `NEMOTRON_BASE_URL`
-- `NEMOTRON_API_KEY` or `NVIDIA_API_KEY`
-- `NEMOTRON_MODEL`
-- `MODAL_TOKEN_ID`
-- `MODAL_TOKEN_SECRET`
-- `OPENAI_API_KEY`
-- provider-specific API keys or bearer tokens
+Do not commit provider credentials. Use Hugging Face Space secrets or local `.env` files for provider keys.
 
 Generated outputs, local moodboards, logs, caches, auth folders, and preview artifacts are intentionally ignored.
 

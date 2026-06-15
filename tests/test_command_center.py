@@ -158,20 +158,21 @@ def test_dashboard_regions_expose_artifacts_and_provider_cards() -> None:
     assert "nw-preview-ribbon" in regions["artifacts"]
     assert "PRIMARY OUTPUT STAGE" in regions["artifacts"]
     assert "JUDGE-SAFE DEMO OUTPUT" in regions["artifacts"]
-    assert "state: dry-run / configured / blocked / failed" in regions["artifacts"]
+    assert "state: dry-run / configured / gated / failed" in regions["artifacts"]
     assert "Forge Operations" in regions["operations"]
-    assert "Provider Handoff Cards" in regions["providers"]
+    assert "Optional Provider Lanes" in regions["providers"]
     assert "nw-provider-meter" in regions["providers"]
     assert "optional gateway" in regions["providers"]
     assert "CHECKPOINTED" in regions["providers"]
     assert "Forge Operations" in regions["operations"]
-    assert "Provider Handoff Cards" in regions["providers"]
+    assert "Optional Provider Lanes" in regions["providers"]
     assert "nw-provider-meter" in regions["providers"]
     assert "Selected: Forge" in regions["command_rail"]
     assert "TRUST MODEL" in regions["topbar"]
     assert "Clean PNG -> pass" in regions["topbar"]
     assert "ST3GG Scan" in regions["inspector"]
     assert "nw-weave-console" in regions["workflow"]
+    assert "Current Run Summary" in regions["workflow"]
     assert "Hackathon Signal" in regions["workflow"]
     assert "Boots / heels" in regions["drawer"]
     assert "checkpointed" in regions["drawer"]
@@ -284,7 +285,7 @@ def test_render_trust_strip_review_scan_shows_blocked_export() -> None:
     html = render_trust_strip(scan=scan)
 
     assert "ST3GG REVIEW" in html
-    assert "EXPORT BLOCKED" in html
+    assert "Export Blocked - Override Available" in html
     assert "trailing data after IEND" in html
 
 
@@ -364,7 +365,7 @@ def test_render_inspector_with_missing_secret_shows_pending() -> None:
     }
     html = render_inspector(operator_state=operator_state)
 
-    assert "MISSING_SECRET" in html
+    assert "Optional - Secret Required" in html
 
 
 def test_render_inspector_with_success_judge_shows_success_status() -> None:
@@ -407,7 +408,7 @@ def test_render_provider_cards_shows_missing_secret_for_unconfigured_sponsor(mon
     monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
     html = render_provider_cards()
 
-    assert "MISSING SECRET" in html
+    assert "Optional - Secret Required" in html
 
 
 def test_render_provider_cards_configured_openbmb_shows_configured(monkeypatch) -> None:
@@ -423,7 +424,7 @@ def test_render_provider_cards_configured_openbmb_shows_configured(monkeypatch) 
     html = render_provider_cards()
 
     assert "CONFIGURED" not in html
-    assert "MISSING SECRET" in html
+    assert "Optional - Secret Required" in html
 
 
 def test_render_provider_cards_configured_openbmb_requires_key_and_base_url(monkeypatch) -> None:

@@ -670,13 +670,13 @@ def export_packet(
     scan = _authoritative_generated_scan(state)
     override_reason = (override_reason or "").strip()
     if run is None:
-        next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export blocked: no active run packet exists."}
+        next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export gate active: run an active weave before preparing an export packet."}
     elif state.get("checkpoint") != "approved":
-        next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export blocked: human checkpoint has not been approved."}
+        next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export gate active: approve the human checkpoint before release."}
     elif not _generated_output_path(state):
-        next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export blocked: no generated artifact exists."}
+        next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export gate active: generate an artifact before preparing evidence."}
     elif scan.get("export_gate") != "clear" and not override_reason:
-        next_state = {**state, "provider_state": "blocked", "export": scan.get("export_gate", "blocked"), "message": "Export blocked: ST3GG gate is not clear. Add an explicit override reason to write an audit packet."}
+        next_state = {**state, "provider_state": "blocked", "export": scan.get("export_gate", "blocked"), "message": "Export gate active: ST3GG is not clear. Add an explicit override reason to write an audit packet."}
     else:
         export_state = "clear" if scan.get("export_gate") == "clear" else "override"
         override_applies = scan.get("export_gate") != "clear" and bool(override_reason)

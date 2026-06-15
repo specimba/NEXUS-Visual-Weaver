@@ -281,8 +281,41 @@ footer { display: none !important; }
   white-space: nowrap;
 }
 .nw-mini-chip { width: fit-content; min-height: 22px; padding: 2px 7px; }
-.nw-canvas { overflow: hidden; height: 570px; }
-.nw-graph { width: 100%; min-height: 548px; display: block; background: #070b0f; }
+.nw-canvas { overflow: hidden; height: auto; min-height: 570px; }
+.nw-run-summary {
+  margin: 10px 12px 0;
+  display: grid;
+  grid-template-columns: 1.1fr repeat(5, minmax(120px, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+.nw-run-summary > strong,
+.nw-run-summary > span {
+  min-height: 48px;
+  border: 1px solid var(--nw-line);
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, rgba(38,215,130,.08), transparent 46%),
+    rgba(255,255,255,.018);
+  padding: 8px 9px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  color: var(--nw-text);
+  font-size: 11px;
+  line-height: 1.25;
+}
+.nw-run-summary > strong {
+  border-color: rgba(38,215,130,.34);
+  color: var(--nw-green);
+  font-size: 12px;
+}
+.nw-run-summary b {
+  color: var(--nw-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.nw-graph { width: 100%; min-height: 470px; display: block; background: #070b0f; }
 .nw-edges path {
   fill: none;
   stroke: var(--nw-cyan);
