@@ -39,6 +39,7 @@ venv.bak/
 *.pfx
 .huggingface/
 .cache/huggingface/
+.hf-upload-cache/
 .modal.toml
 .netrc
 .pypirc
@@ -66,4 +67,3 @@ Thumbs.db
 .idea/
 .vscode/
 tempCodeRunnerFile.py
-
