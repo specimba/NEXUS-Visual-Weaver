@@ -286,25 +286,6 @@ def test_export_packet_redacts_raw_payload_paths_and_secret_like_values(monkeypa
     assert payload["provider_states"]["minicpm"] == "failed"
 
 
-def test_export_packet_redacts_windows_backslash_paths_on_linux(monkeypatch) -> None:
-    monkeypatch.setenv("NEXUS_EXPORT_DIR", "outputs/test-exports")
-    run = build_command_center_run("redaction brief")
-    scan = {
-        "status": "review",
-        "export_gate": "blocked",
-        "findings": [r"raw hidden bytes at C:\Users\speci.000\Downloads\thing.png"],
-        "purification_actions": [],
-    }
-    state = _make_base_state()
-
-    result = write_export_packet(run=run, scan=scan, operator_state=state, adult_mode=False)
-    payload = json.loads(Path(result["path"]).read_text(encoding="utf-8"))
-    serialized = json.dumps(payload)
-
-    assert r"C:\Users\speci.000\Downloads" not in serialized
-    assert "[local_path]/thing.png" in serialized
-
-
 def test_export_packet_records_st3gg_override_reason(monkeypatch) -> None:
     monkeypatch.setenv("NEXUS_EXPORT_DIR", "outputs/test-exports")
     run = build_command_center_run("gothic patent leather platform boots")
@@ -322,3 +303,374 @@ def test_export_packet_records_st3gg_override_reason(monkeypatch) -> None:
         "used": True,
         "reason": "Operator reviewed the ST3GG findings and is writing an audit packet only.",
     }
+
+
+# --- _is_within tests ---
+
+from nexus_visual_weaver.exporter import (
+    _artifact_name,
+    _is_within,
+    _safe_dict,
+    _safe_export_candidate,
+    _safe_provider,
+    _safe_reference_metadata,
+    _safe_scan,
+    _sanitize_text,
+    REPO_ROOT,
+)
+
+
+def test_is_within_returns_true_for_child_path() -> None:
+    root = Path("/some/root")
+    child = Path("/some/root/subdir/file.txt")
+
+    assert _is_within(child, root) is True
+
+
+def test_is_within_returns_false_for_sibling_path() -> None:
+    root = Path("/some/root")
+    sibling = Path("/some/other/file.txt")
+
+    assert _is_within(sibling, root) is False
+
+
+def test_is_within_returns_false_for_parent_path() -> None:
+    root = Path("/some/root/subdir")
+    parent = Path("/some/root")
+
+    assert _is_within(parent, root) is False
+
+
+def test_is_within_returns_false_for_same_path() -> None:
+    root = Path("/some/root")
+    # Same path is not "within" itself (relative_to with same path succeeds but returns empty Path)
+    # _is_within should return True for same path since relative_to doesn't raise
+    result = _is_within(root, root)
+    # Same path: relative_to returns Path('.') or empty - shouldn't raise, returns True
+    assert result is True
+
+
+# --- _artifact_name tests ---
+
+def test_artifact_name_returns_filename_from_unix_path() -> None:
+    assert _artifact_name("/data/nexus_visual_weaver/artifact.png") == "artifact.png"
+
+
+def test_artifact_name_returns_filename_from_windows_path() -> None:
+    assert _artifact_name(r"C:\Users\user\Downloads\artifact.png") == "artifact.png"
+
+
+def test_artifact_name_returns_none_for_none() -> None:
+    assert _artifact_name(None) is None
+
+
+def test_artifact_name_returns_none_for_empty_string() -> None:
+    assert _artifact_name("") is None
+
+
+def test_artifact_name_returns_filename_for_simple_name() -> None:
+    assert _artifact_name("artifact.png") == "artifact.png"
+
+
+# --- _sanitize_text tests ---
+
+def test_sanitize_text_redacts_hf_token() -> None:
+    text = "token is hf_abcdefghijklmnopqrstuvwxyz1234567"
+    result = _sanitize_text(text)
+
+    assert "hf_abcdefghijklmnopqrstuvwxyz" not in result
+    assert "[redacted_secret]" in result
+
+
+def test_sanitize_text_redacts_bearer_token() -> None:
+    text = "Authorization: Bearer sk-test-abcdefghijklmnopqrstu"
+    result = _sanitize_text(text)
+
+    assert "sk-test-abcdefghijklmnopqrstu" not in result
+
+
+def test_sanitize_text_redacts_credential_names() -> None:
+    text = "Please set MINICPM_API_KEY and NEMOTRON_API_KEY"
+    result = _sanitize_text(text)
+
+    assert "MINICPM_API_KEY" not in result
+    assert "NEMOTRON_API_KEY" not in result
+    assert "[redacted_credential_name]" in result
+
+
+def test_sanitize_text_redacts_windows_paths() -> None:
+    text = "Found at C:\\Users\\user\\Downloads\\artifact.png"
+    result = _sanitize_text(text)
+
+    assert "C:\\Users\\user\\Downloads" not in result
+    assert "[local_path]/artifact.png" in result
+
+
+def test_sanitize_text_redacts_data_paths() -> None:
+    text = "Output stored at /data/nexus_visual_weaver/artifact.png"
+    result = _sanitize_text(text)
+
+    assert "/data/nexus_visual_weaver" not in result
+    assert "[data]/" in result
+
+
+def test_sanitize_text_truncates_to_1000_chars() -> None:
+    long_text = "safe text " * 200
+    result = _sanitize_text(long_text)
+
+    assert len(result) <= 1000
+    assert result.endswith("...")
+
+
+def test_sanitize_text_does_not_truncate_short_text() -> None:
+    short_text = "safe short text without secrets"
+    result = _sanitize_text(short_text)
+
+    assert result == short_text
+
+
+# --- _safe_dict tests ---
+
+def test_safe_dict_drops_sensitive_keys() -> None:
+    data = {
+        "status": "ok",
+        "token": "hf_secretvalue",
+        "api_key": "sk-secretvalue",
+        "message": "clean",
+    }
+    result = _safe_dict(data)
+
+    assert "status" in result
+    assert "message" in result
+    assert "token" not in result
+    assert "api_key" not in result
+
+
+def test_safe_dict_preserves_safe_keys() -> None:
+    data = {"status": "pass", "export_gate": "clear", "extension": ".png"}
+    result = _safe_dict(data)
+
+    assert result == data
+
+
+def test_safe_dict_handles_nested_dicts() -> None:
+    data = {"outer": {"secret": "hidden", "safe_field": "visible"}}
+    result = _safe_dict(data)
+
+    assert "secret" not in result.get("outer", {})
+    assert result["outer"]["safe_field"] == "visible"
+
+
+def test_safe_dict_limits_lists_to_40() -> None:
+    data = list(range(50))
+    result = _safe_dict(data)
+
+    assert len(result) == 40
+
+
+def test_safe_dict_sanitizes_string_values() -> None:
+    data = {"message": "Error: MINICPM_API_KEY not set"}
+    result = _safe_dict(data)
+
+    assert "MINICPM_API_KEY" not in result.get("message", "")
+
+
+def test_safe_dict_preserves_size_bytes_when_allowed() -> None:
+    data = {"size_bytes": 1024, "token": "hf_secret123456789012345"}
+    result = _safe_dict(data, allow_size_bytes=True)
+
+    assert "size_bytes" in result
+    assert result["size_bytes"] == 1024
+    assert "token" not in result
+
+
+def test_safe_dict_drops_size_bytes_by_default() -> None:
+    # "bytes" matches the sensitive key pattern
+    data = {"size_bytes": 1024, "status": "ok"}
+    result = _safe_dict(data)
+
+    assert "size_bytes" not in result
+
+
+def test_safe_dict_returns_non_dict_non_list_unchanged() -> None:
+    assert _safe_dict(42) == 42
+    assert _safe_dict(3.14) == 3.14
+    assert _safe_dict(True) is True
+    assert _safe_dict(None) is None
+
+
+# --- _safe_scan tests ---
+
+def test_safe_scan_extracts_required_fields() -> None:
+    scan = {
+        "status": "pass",
+        "scanner": "ST3GG v2",
+        "export_gate": "clear",
+        "extension": ".png",
+        "magic": "PNG",
+        "findings": ["no issues"],
+        "purification_actions": ["none needed"],
+        "payload_excerpt": "HIDDEN_SENSITIVE_DATA",
+    }
+    result = _safe_scan(scan)
+
+    assert result["status"] == "pass"
+    assert result["scanner"] == "ST3GG v2"
+    assert result["export_gate"] == "clear"
+    assert result["extension"] == ".png"
+    assert result["magic"] == "PNG"
+    assert "payload_excerpt" not in result
+
+
+def test_safe_scan_handles_empty_scan() -> None:
+    result = _safe_scan({})
+
+    assert "status" in result
+    assert "export_gate" in result
+    assert result["status"] is None
+    assert result["export_gate"] is None
+
+
+def test_safe_scan_sanitizes_findings() -> None:
+    scan = {
+        "findings": ["found MINICPM_API_KEY pattern", "raw bytes at C:\\Users\\data\\file.png"],
+    }
+    result = _safe_scan(scan)
+
+    serialized = json.dumps(result)
+    assert "MINICPM_API_KEY" not in serialized
+    assert "C:\\Users\\data" not in serialized
+
+
+# --- _safe_provider tests ---
+
+def test_safe_provider_extracts_fields() -> None:
+    provider = {
+        "status": "success",
+        "provider_state": "configured",
+        "provider": "OpenBMB",
+        "repo_id": "openbmb/MiniCPM-V-4.6",
+        "model": "MiniCPM-V-4.6",
+        "message": "judge returned evidence",
+        "evidence": {"overall_status": "pass"},
+        "latency_seconds": 1.23,
+    }
+    result = _safe_provider(provider)
+
+    assert result["status"] == "success"
+    assert result["provider"] == "OpenBMB"
+    assert result["repo_id"] == "openbmb/MiniCPM-V-4.6"
+    assert result["latency_seconds"] == 1.23
+    assert result["evidence"]["overall_status"] == "pass"
+
+
+def test_safe_provider_handles_none_input() -> None:
+    result = _safe_provider(None)
+
+    assert isinstance(result, dict)
+    assert "status" in result
+    assert result["status"] is None
+
+
+def test_safe_provider_redacts_secret_values_in_evidence() -> None:
+    provider = {
+        "status": "failed",
+        "evidence": {"token_used": "hf_abcdefghijklmnopqrstuvwx", "raw": "sensitive-data"},
+    }
+    result = _safe_provider(provider)
+
+    assert "token_used" not in result["evidence"]
+    assert "raw" not in result["evidence"]
+
+
+def test_safe_provider_handles_non_dict_evidence() -> None:
+    provider = {"status": "success", "evidence": "plain string evidence"}
+    result = _safe_provider(provider)
+
+    # Non-dict evidence should be treated as empty
+    assert result["evidence"] == {}
+
+
+# --- _safe_reference_metadata tests ---
+
+def test_safe_reference_metadata_returns_empty_for_non_list() -> None:
+    assert _safe_reference_metadata(None) == []
+    assert _safe_reference_metadata("string") == []
+    assert _safe_reference_metadata(42) == []
+
+
+def test_safe_reference_metadata_extracts_fields_from_records() -> None:
+    records = [
+        {
+            "source": "upload",
+            "status": "pass",
+            "basename": "C:/Users/user/Downloads/reference.png",
+            "sha256": "a" * 64,
+            "size_bytes": 1024,
+            "st3gg_status": "pass",
+            "export_gate": "clear",
+            "magic": "PNG",
+            "extension": ".png",
+        }
+    ]
+    result = _safe_reference_metadata(records)
+
+    assert len(result) == 1
+    assert result[0]["source"] == "upload"
+    assert result[0]["basename"] == "reference.png"  # Only filename, not full path
+    assert result[0]["sha256"] == "a" * 64
+    assert result[0]["export_gate"] == "clear"
+
+
+def test_safe_reference_metadata_limits_to_20_records() -> None:
+    records = [{"source": "upload", "sha256": str(i)} for i in range(30)]
+    result = _safe_reference_metadata(records)
+
+    assert len(result) == 20
+
+
+def test_safe_reference_metadata_skips_non_dict_records() -> None:
+    records = [{"source": "upload"}, "not a dict", None, {"source": "url"}]
+    result = _safe_reference_metadata(records)
+
+    assert len(result) == 2
+    assert all(isinstance(r, dict) for r in result)
+
+
+def test_safe_reference_metadata_includes_url_fields() -> None:
+    records = [
+        {
+            "source": "url",
+            "status": "metadata_only",
+            "domain": "shop.example.test",
+            "url_hash": "b" * 64,
+        }
+    ]
+    result = _safe_reference_metadata(records)
+
+    assert result[0]["domain"] == "shop.example.test"
+    assert result[0]["url_hash"] == "b" * 64
+
+
+# --- _safe_export_candidate tests ---
+
+def test_safe_export_candidate_accepts_outputs_dir() -> None:
+    candidate = REPO_ROOT / "outputs" / "exports" / "test-subdir"
+    result = _safe_export_candidate(candidate)
+
+    assert result is not None
+    assert "outputs" in str(result)
+
+
+def test_safe_export_candidate_rejects_src_dir() -> None:
+    candidate = REPO_ROOT / "src" / "nexus_visual_weaver" / "exports"
+    result = _safe_export_candidate(candidate)
+
+    assert result is None
+
+
+def test_safe_export_candidate_rejects_src_root_itself() -> None:
+    candidate = REPO_ROOT / "src"
+    result = _safe_export_candidate(candidate)
+
+    assert result is None

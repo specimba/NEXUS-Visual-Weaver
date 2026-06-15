@@ -4,6 +4,9 @@ from nexus_visual_weaver.hf_runtime import (
     FLUX_REPO_ID,
     PRIVATE_RESEARCH_FLUX_REPO_ID,
     TINY_TITAN_FLUX_REPO_ID,
+    _adapter_recipe,
+    _repo_candidates,
+    active_flux_repo_id,
     default_lora_repo_id,
     generate_flux_image,
     hf_runtime_enabled,
@@ -54,3 +57,155 @@ def test_artifact_lane_embeds_generated_image() -> None:
     assert "nw-preview-real-image" in html
     assert "data:image/png;base64" in html
     assert "Real FLUX.2 Klein artifact" in html
+
+
+# --- active_flux_repo_id tests ---
+
+def test_active_flux_repo_id_defaults_to_9b(monkeypatch) -> None:
+    monkeypatch.delenv("NEXUS_FLUX_REPO_ID", raising=False)
+    monkeypatch.delenv("NEXUS_TINY_TITAN_MODE", raising=False)
+
+    assert active_flux_repo_id() == FLUX_REPO_ID
+
+
+def test_active_flux_repo_id_returns_tiny_titan_when_mode_set(monkeypatch) -> None:
+    monkeypatch.delenv("NEXUS_FLUX_REPO_ID", raising=False)
+    monkeypatch.setenv("NEXUS_TINY_TITAN_MODE", "1")
+
+    assert active_flux_repo_id() == TINY_TITAN_FLUX_REPO_ID
+
+
+def test_active_flux_repo_id_returns_configured_repo_id(monkeypatch) -> None:
+    monkeypatch.setenv("NEXUS_FLUX_REPO_ID", "custom/flux-model")
+    monkeypatch.delenv("NEXUS_TINY_TITAN_MODE", raising=False)
+
+    assert active_flux_repo_id() == "custom/flux-model"
+
+
+def test_active_flux_repo_id_configured_env_overrides_tiny_titan(monkeypatch) -> None:
+    monkeypatch.setenv("NEXUS_FLUX_REPO_ID", "custom/flux-model")
+    monkeypatch.setenv("NEXUS_TINY_TITAN_MODE", "1")
+
+    # Configured env takes precedence over TINY_TITAN_MODE
+    assert active_flux_repo_id() == "custom/flux-model"
+
+
+# --- _repo_candidates tests ---
+
+def test_repo_candidates_includes_primary_and_tiny_titan_fallback(monkeypatch) -> None:
+    monkeypatch.delenv("NEXUS_DISABLE_TINY_TITAN_FALLBACK", raising=False)
+
+    candidates = _repo_candidates(FLUX_REPO_ID)
+
+    assert candidates[0] == FLUX_REPO_ID
+    assert TINY_TITAN_FLUX_REPO_ID in candidates
+    assert len(candidates) == 2
+
+
+def test_repo_candidates_only_primary_when_tiny_titan_is_primary(monkeypatch) -> None:
+    monkeypatch.delenv("NEXUS_DISABLE_TINY_TITAN_FALLBACK", raising=False)
+
+    candidates = _repo_candidates(TINY_TITAN_FLUX_REPO_ID)
+
+    assert candidates == [TINY_TITAN_FLUX_REPO_ID]
+
+
+def test_repo_candidates_only_primary_when_fallback_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("NEXUS_DISABLE_TINY_TITAN_FALLBACK", "1")
+
+    candidates = _repo_candidates(FLUX_REPO_ID)
+
+    assert candidates == [FLUX_REPO_ID]
+
+
+def test_repo_candidates_first_is_always_primary(monkeypatch) -> None:
+    monkeypatch.delenv("NEXUS_DISABLE_TINY_TITAN_FALLBACK", raising=False)
+
+    for repo_id in [FLUX_REPO_ID, "other/model"]:
+        candidates = _repo_candidates(repo_id)
+        assert candidates[0] == repo_id
+
+
+# --- _adapter_recipe tests ---
+
+def test_adapter_recipe_returns_none_for_none_input() -> None:
+    assert _adapter_recipe(None) is None
+
+
+def test_adapter_recipe_returns_none_for_unknown_repo_id() -> None:
+    assert _adapter_recipe("nonexistent/unknown-repo") is None
+
+
+def test_adapter_recipe_returns_recipe_for_known_repo_id() -> None:
+    result = _adapter_recipe("DeverStyle/Flux.2-Klein-Loras")
+
+    assert result is not None
+    assert result.repo_id == "DeverStyle/Flux.2-Klein-Loras"
+
+
+def test_adapter_recipe_returns_recipe_for_4b_outpaint() -> None:
+    result = _adapter_recipe("fal/flux-2-klein-4B-outpaint-lora")
+
+    assert result is not None
+    assert result.requires_image is True
+
+
+# --- HFGenerationResult disabled path lora fields tests ---
+
+def test_generate_flux_image_disabled_includes_lora_repo_id(monkeypatch) -> None:
+    monkeypatch.setenv("NEXUS_DISABLE_REAL_HF", "1")
+    monkeypatch.delenv("NEXUS_FLUX_REPO_ID", raising=False)
+    monkeypatch.delenv("NEXUS_TINY_TITAN_MODE", raising=False)
+
+    result = generate_flux_image("test prompt")
+
+    assert result.status == "disabled"
+    assert result.lora_status == "disabled"
+    # Default lora_repo_id should be the DeverStyle adapter for the 9B model
+    assert result.lora_repo_id == "DeverStyle/Flux.2-Klein-Loras"
+
+
+def test_generate_flux_image_disabled_includes_fallback_used_false(monkeypatch) -> None:
+    monkeypatch.setenv("NEXUS_DISABLE_REAL_HF", "1")
+
+    result = generate_flux_image("test prompt")
+
+    assert result.fallback_used is False
+    assert result.primary_error is None
+
+
+def test_generate_flux_image_tiny_titan_mode_uses_4b_repo_id(monkeypatch) -> None:
+    monkeypatch.setenv("NEXUS_DISABLE_REAL_HF", "1")
+    monkeypatch.setenv("NEXUS_TINY_TITAN_MODE", "1")
+
+    result = generate_flux_image("test prompt")
+
+    assert result.status == "disabled"
+    assert result.repo_id == TINY_TITAN_FLUX_REPO_ID
+
+
+def test_generate_flux_image_disabled_uses_lora_message() -> None:
+    import os
+    os.environ["NEXUS_DISABLE_REAL_HF"] = "1"
+    try:
+        result = generate_flux_image("test prompt")
+        assert "LoRA loading requires" in result.lora_message
+    finally:
+        del os.environ["NEXUS_DISABLE_REAL_HF"]
+
+
+# --- default_lora_repo_id tests ---
+
+def test_default_lora_repo_id_returns_none_for_unknown_model() -> None:
+    result = default_lora_repo_id("unknown/nonexistent-model")
+    assert result is None
+
+
+def test_default_lora_repo_id_excludes_requires_image_adapters() -> None:
+    # fal/flux-2-klein-4B-outpaint-lora requires_image=True, so it should be excluded
+    result = default_lora_repo_id("black-forest-labs/FLUX.2-klein-4B")
+    # DeverStyle/Flux.2-Klein-Loras is compatible with 4B via compatible_repo_ids
+    assert result is not None
+    recipe_result = _adapter_recipe(result)
+    assert recipe_result is not None
+    assert recipe_result.requires_image is False
