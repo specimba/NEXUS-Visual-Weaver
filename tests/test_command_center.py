@@ -3,10 +3,13 @@ from pathlib import Path
 from nexus_visual_weaver.catalog import (
     DEFAULT_ACTIVE_STACK,
     PRIVATE_RESEARCH_STACK,
+    RAVEN_QUALITY_STACK,
+    TINY_TITAN_STACK,
     active_stack,
     catalog_summary,
     filter_catalog,
     parameter_budget,
+    tiny_titan_stack,
 )
 from nexus_visual_weaver.grounding import inspect_outfit
 from nexus_visual_weaver.model_relay import WeaverModelRelay
@@ -63,13 +66,22 @@ def test_active_parameter_budget_passes_default_stack() -> None:
     assert budget["active_b"] <= 32.0
 
 
-def test_public_stack_uses_flux_4b_and_excludes_private_models() -> None:
+def test_default_stack_uses_raven_quality_models() -> None:
     stack = active_stack(False)
+    repo_ids = {model.repo_id for model in stack}
+
+    assert "black-forest-labs/FLUX.2-klein-9B" in repo_ids
+    assert "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf" in repo_ids
+    assert "black-forest-labs/FLUX.2-klein-4B" not in repo_ids
+    assert all(model.params_b < 32.0 for model in stack)
+
+
+def test_tiny_titan_stack_is_sidecar_only_and_all_models_are_under_4b() -> None:
+    stack = tiny_titan_stack()
     repo_ids = {model.repo_id for model in stack}
 
     assert "black-forest-labs/FLUX.2-klein-4B" in repo_ids
     assert "black-forest-labs/FLUX.2-klein-9B" not in repo_ids
-    assert not any("OFFELLIA" in repo_id for repo_id in repo_ids)
     assert all(model.params_b <= 4.0 for model in stack)
 
 
@@ -213,7 +225,8 @@ def test_command_header_exposes_governed_run_controls() -> None:
 
     assert "Raven Chronicle Active Weave" in header
     assert "ST3GG ALWAYS ON" in header
-    assert "FLUX.2 4B PINNED" in header
+    assert "FLUX.2 9B PINNED" in header
+    assert "4B TINY SIDECAR" in header
     assert "HUMAN CHECKPOINT" in header
 
 
@@ -359,7 +372,7 @@ def test_render_inspector_with_success_judge_shows_success_status() -> None:
 def test_render_inspector_shows_default_stack_label_without_run() -> None:
     html = render_inspector()
 
-    assert "FLUX.2 4B / MiniCPM / LocateAnything" in html
+    assert "FLUX.2 9B / OFFELLIA / LocateAnything" in html
 
 
 # --- render_provider_cards sponsor lane tests ---
@@ -432,11 +445,11 @@ def test_render_operations_and_inspector_redact_payload_details() -> None:
 
 # --- catalog public_demo field tests ---
 
-def test_filter_catalog_excludes_flux_9b_in_public_mode() -> None:
+def test_filter_catalog_includes_flux_9b_in_public_mode() -> None:
     models, _ = filter_catalog(False)
     repo_ids = {model.repo_id for model in models}
 
-    assert "black-forest-labs/FLUX.2-klein-9B" not in repo_ids
+    assert "black-forest-labs/FLUX.2-klein-9B" in repo_ids
 
 
 def test_filter_catalog_includes_flux_9b_in_adult_mode() -> None:
@@ -446,11 +459,11 @@ def test_filter_catalog_includes_flux_9b_in_adult_mode() -> None:
     assert "black-forest-labs/FLUX.2-klein-9B" in repo_ids
 
 
-def test_filter_catalog_excludes_offellia_in_public_mode() -> None:
+def test_filter_catalog_includes_offellia_in_public_mode() -> None:
     models, _ = filter_catalog(False)
     repo_ids = {model.repo_id for model in models}
 
-    assert not any("OFFELLIA" in repo_id for repo_id in repo_ids)
+    assert "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf" in repo_ids
 
 
 def test_active_stack_uses_private_research_stack_in_adult_mode() -> None:
@@ -458,6 +471,7 @@ def test_active_stack_uses_private_research_stack_in_adult_mode() -> None:
     repo_ids = {model.repo_id for model in stack}
 
     assert "black-forest-labs/FLUX.2-klein-9B" in repo_ids
+    assert "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf" in repo_ids
     assert "black-forest-labs/FLUX.2-klein-4B" not in repo_ids
 
 
@@ -466,11 +480,14 @@ def test_private_research_stack_constant_contains_9b_and_offellia() -> None:
     assert "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf" in PRIVATE_RESEARCH_STACK
 
 
-def test_default_active_stack_constant_uses_4b_and_sponsor_models() -> None:
-    assert "black-forest-labs/FLUX.2-klein-4B" in DEFAULT_ACTIVE_STACK
+def test_default_active_stack_constant_uses_9b_and_sponsor_models() -> None:
+    assert DEFAULT_ACTIVE_STACK == RAVEN_QUALITY_STACK
+    assert "black-forest-labs/FLUX.2-klein-9B" in DEFAULT_ACTIVE_STACK
+    assert "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf" in DEFAULT_ACTIVE_STACK
     assert "openbmb/MiniCPM-V-4.6" in DEFAULT_ACTIVE_STACK
     assert "nvidia/NVIDIA-Nemotron-Parse-v1.2" in DEFAULT_ACTIVE_STACK
-    assert "black-forest-labs/FLUX.2-klein-9B" not in DEFAULT_ACTIVE_STACK
+    assert "black-forest-labs/FLUX.2-klein-4B" not in DEFAULT_ACTIVE_STACK
+    assert "black-forest-labs/FLUX.2-klein-4B" in TINY_TITAN_STACK
 
 
 # --- schema ModelCandidate public_demo tests ---
@@ -510,7 +527,8 @@ def test_public_demo_false_models_are_excluded_from_public_filter() -> None:
         license="other",
         public_demo=False,
     )
-    # public_demo=False should mean filter_catalog(False) excludes it
-    # The catalog-level test: verify FLUX 9B (public_demo=False) is absent
+    # public_demo=False should mean filter_catalog(False) excludes hidden support lanes.
+    # The catalog-level test: verify Modal VOID is absent from public catalog scope.
     models_public, _ = filter_catalog(False)
     assert all(m.public_demo for m in models_public)
+    assert "netflix/void-model" not in {model.repo_id for model in models_public}

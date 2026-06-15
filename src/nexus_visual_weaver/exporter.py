@@ -84,18 +84,42 @@ def write_export_packet(
     artifact = _artifact_name(generation.get("output_path"))
     if "output_path" in generation:
         generation["output_path"] = artifact
+    modal_job = operator_state.get("modal_video_repair") or {
+        "status": "deferred",
+        "repo_id": "netflix/void-model",
+        "provider": "modal",
+    }
+    audio_lore = operator_state.get("audio_lore_tts") or {
+        "status": "optional",
+        "repo_id": "hexgrad/Kokoro-82M",
+    }
+    offellia = operator_state.get("offellia_judge") or {
+        "status": "deferred_local",
+        "repo_id": "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
+    }
+    tiny_titan = operator_state.get("tiny_titan_sidecar") or {
+        "status": "available",
+        "repo_id": "black-forest-labs/FLUX.2-klein-4B",
+    }
+    locate_grounding = operator_state.get("locateanything_grounding") or {}
     packet = {
         "schema": "nexus_visual_weaver.export_packet.v1",
         "run_id": run_id,
         "created_at_epoch": int(time.time()),
+        "active_preset": operator_state.get("active_preset", "Raven Quality Stack"),
         "adult_mode": run_adult_mode,
         "prompt": getattr(getattr(run, "request", None), "prompt", ""),
         "refined_prompt": getattr(getattr(run, "refined_prompt", None), "refined", ""),
         "artifact": artifact,
         "generation": generation,
         "st3gg_scan": scan,
+        "locateanything_grounding": locate_grounding,
+        "offellia_judge": offellia,
         "minicpm_judge": operator_state.get("minicpm_judge") or {},
         "nemotron_evidence": operator_state.get("nemotron_evidence") or {},
+        "modal_video_repair": modal_job,
+        "audio_lore_tts": audio_lore,
+        "tiny_titan_sidecar": tiny_titan,
         "checkpoint": {
             "status": operator_state.get("checkpoint"),
             "message": operator_state.get("message"),
@@ -118,6 +142,11 @@ def write_export_packet(
             "off_brand_custom_ui": True,
             "openbmb_lane": (operator_state.get("minicpm_judge") or {}).get("status") == "success",
             "nvidia_nemotron_lane": (operator_state.get("nemotron_evidence") or {}).get("status") == "success",
+            "offellia_quality_lane": offellia.get("status") in {"success", "completed"},
+            "modal_void_lane": modal_job.get("status") in {"success", "completed", "documented"},
+            "tiny_titan_sidecar": tiny_titan.get("status") in {"success", "available", "sidecar"},
+            "raven_quality_stack": True,
+            "locateanything_grounding": bool(locate_grounding.get("targets") or locate_grounding.get("repo_id")),
             "st3gg_export_gate": scan.get("export_gate"),
         },
     }

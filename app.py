@@ -49,10 +49,32 @@ MODEL_RELAY = WeaverModelRelay()
 
 def _default_operator_state() -> dict[str, Any]:
     return {
+        "active_preset": "Raven Quality Stack",
         "provider_state": "idle",
         "checkpoint": "pending",
         "export": "pending",
         "message": "No operator action yet.",
+        "modal_video_repair": {
+            "status": "deferred",
+            "repo_id": "netflix/void-model",
+            "provider": "modal",
+            "message": "Offline/Modal VOID repair sample is documented but not a blocking runtime default.",
+        },
+        "offellia_judge": {
+            "status": "deferred_local",
+            "repo_id": "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
+            "message": "Quality/taste judge lane is declared in the Raven stack and runs only when local GGUF runtime is configured.",
+        },
+        "audio_lore_tts": {
+            "status": "optional",
+            "repo_id": "hexgrad/Kokoro-82M",
+            "message": "Lore narration lane is off by default for the public demo.",
+        },
+        "tiny_titan_sidecar": {
+            "status": "available",
+            "repo_id": "black-forest-labs/FLUX.2-klein-4B",
+            "message": "Public-safe 4B sidecar remains selectable without weakening the quality preset.",
+        },
     }
 
 
@@ -163,6 +185,8 @@ def run_weave(
     if generation.status == "success":
         provider_state = "generated"
     operator_state = {
+        **_default_operator_state(),
+        "active_preset": "Raven Quality Stack",
         "provider_state": provider_state,
         "checkpoint": "pending_review",
         "export": generated_scan.get("export_gate", "pending"),
@@ -172,6 +196,20 @@ def run_weave(
         "generated_scan": generated_scan,
         "minicpm_judge": minicpm.to_dict(),
         "nemotron_evidence": nemotron.to_dict(),
+        "locateanything_grounding": {
+            "status": run.inspection.status,
+            "repo_id": run.inspection.locate_model,
+            "targets": [
+                {
+                    "slot_name": target.slot_name,
+                    "query": target.query,
+                    "expected_region": target.expected_region,
+                    "confidence": target.confidence,
+                }
+                for target in run.inspection.targets[:6]
+            ],
+            "drift_flags": run.inspection.drift_flags,
+        },
     }
     regions = _dashboard_regions(
         run=run,
@@ -304,9 +342,27 @@ def scan_reference(
             scan=reference_scan,
             wardrobe_summary=_wardrobe_summary(run),
         )
+    locate_plan = {}
+    if run is not None:
+        locate_plan = {
+            "status": run.inspection.status,
+            "repo_id": run.inspection.locate_model,
+            "source": "reference_scan",
+            "targets": [
+                {
+                    "slot_name": target.slot_name,
+                    "query": target.query,
+                    "expected_region": target.expected_region,
+                    "confidence": target.confidence,
+                }
+                for target in run.inspection.targets[:6]
+            ],
+            "drift_flags": run.inspection.drift_flags,
+        }
     next_state = {
         **state,
         **({"reference_judge": minicpm.to_dict()} if minicpm else {}),
+        **({"reference_locate_plan": locate_plan, "locateanything_grounding": locate_plan} if locate_plan else {}),
         "reference_scan": reference_scan,
         "reference_export_gate": reference_scan.get("export_gate", "pending"),
         "export": state.get("export", generated_scan.get("export_gate", "pending")),

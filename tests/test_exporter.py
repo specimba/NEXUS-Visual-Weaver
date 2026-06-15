@@ -11,8 +11,13 @@ def _make_base_state(**overrides):
         "checkpoint": "approved",
         "message": "approved",
         "generation": {"status": "success", "output_path": "/data/artifact.png", "hf_token_present": True},
+        "locateanything_grounding": {"status": "pass", "repo_id": "nvidia/LocateAnything-3B", "targets": [{"slot_name": "footwear"}]},
+        "offellia_judge": {"status": "deferred_local", "repo_id": "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf"},
         "minicpm_judge": {"status": "success", "repo_id": "openbmb/MiniCPM-V-4.6"},
         "nemotron_evidence": {"status": "missing_secret", "repo_id": "nvidia/NVIDIA-Nemotron-Parse-v1.2"},
+        "modal_video_repair": {"status": "deferred", "repo_id": "netflix/void-model", "provider": "modal"},
+        "audio_lore_tts": {"status": "optional", "repo_id": "hexgrad/Kokoro-82M"},
+        "tiny_titan_sidecar": {"status": "available", "repo_id": "black-forest-labs/FLUX.2-klein-4B"},
     }
     state.update(overrides)
     return state
@@ -32,6 +37,14 @@ def test_write_export_packet_records_evidence_without_secrets(monkeypatch) -> No
     assert payload["hackathon_claims"]["openbmb_lane"] is True
     assert payload["hackathon_claims"]["nvidia_nemotron_lane"] is False
     assert payload["parameter_budget"]["status"] == "pass"
+    assert payload["active_preset"] == "Raven Quality Stack"
+    assert payload["modal_video_repair"]["repo_id"] == "netflix/void-model"
+    assert payload["offellia_judge"]["repo_id"] == "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf"
+    assert payload["audio_lore_tts"]["repo_id"] == "hexgrad/Kokoro-82M"
+    assert payload["tiny_titan_sidecar"]["repo_id"] == "black-forest-labs/FLUX.2-klein-4B"
+    assert payload["hackathon_claims"]["raven_quality_stack"] is True
+    assert payload["hackathon_claims"]["locateanything_grounding"] is True
+    assert payload["hackathon_claims"]["offellia_quality_lane"] is False
     assert "token" not in json.dumps(payload).lower()
     assert payload["artifact"] == "artifact.png"
     assert payload["generation"]["output_path"] == "artifact.png"

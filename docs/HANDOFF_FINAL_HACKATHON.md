@@ -8,19 +8,20 @@
 - Public Space URL: `https://build-small-hackathon-nexus-visual-weaver-a107340.hf.space/`
 - HF rollback SHA: `410a467c55d11e7308249198bd5fe0b2c190aec6`.
 - Branch discipline: use only `main` and `codex/specimba/ui-polish-command-center`; no extra recovery branches.
-- Primary goal: finish a countable Build Small submission with real FLUX.2 4B generation, ST3GG scan, optional OpenBMB MiniCPM-V judge evidence, optional NVIDIA Nemotron evidence, checkpointed export packet, README prize mapping, demo video, and social post.
+- Primary goal: finish a countable Build Small submission with Raven Quality Stack generation, ST3GG scan, LocateAnything grounding, optional OpenBMB MiniCPM-V judge evidence, optional NVIDIA Nemotron evidence, optional Modal VOID sidecar evidence, checkpointed export packet, README prize mapping, demo video, and social post.
 
 ## Secrets Needed
 
 Do not paste these into chat, commits, logs, or export packets.
 
-- `HF_TOKEN`: optional for public FLUX.2 Klein 4B access and required only if private/gated research lanes are enabled.
+- `HF_TOKEN`: required for gated FLUX.2 Klein 9B access after license acceptance; the app can honestly fall back to the 4B Tiny Titan sidecar if the 9B lane is unavailable.
 - `MINICPM_BASE_URL`: OpenBMB OpenAI-compatible endpoint base URL.
 - `MINICPM_API_KEY`: OpenBMB bearer token.
 - `MINICPM_MODEL`: default `MiniCPM-V-4.6`.
 - `NEMOTRON_BASE_URL`: OpenAI-compatible Nemotron endpoint if available.
 - `NEMOTRON_API_KEY` or `NVIDIA_API_KEY`: Nemotron provider token.
 - `NEMOTRON_MODEL`: default `nvidia/NVIDIA-Nemotron-Parse-v1.2`.
+- `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET`: optional for a documented `netflix/void-model` video repair sidecar job.
 
 ## Verification Commands
 
@@ -59,27 +60,28 @@ Current evidence from the SSE API:
 
 ## Runtime Flow
 
-1. `run_active_weave` builds the Raven Chronicle run packet.
-2. FLUX.2 Klein 4B generates the image on Space when HF runtime is enabled.
+1. `run_active_weave` builds the Raven Chronicle run packet from prompt, wardrobe, lore, model stack, and LocateAnything region plan.
+2. FLUX.2 Klein 9B generates the flagship image on Space when HF runtime and gated access are configured; FLUX.2 Klein 4B is an honest sidecar fallback.
 3. Generated artifact is scanned by ST3GG.
 4. MiniCPM-V judge runs when OpenBMB secrets are present.
 5. Nemotron evidence runs when Nemotron/NVIDIA endpoint secrets are present.
-6. `approve_checkpoint` requires a generated artifact and ST3GG clear/pass state.
-7. `prepare_export_packet` writes a governed JSON packet to `/data/nexus_visual_weaver/exports` or `outputs/exports`.
+6. Modal VOID repair remains a sidecar evidence lane until a real job is documented.
+7. `approve_checkpoint` requires a generated artifact and ST3GG clear/pass state.
+8. `prepare_export_packet` writes a governed JSON packet to `/data/nexus_visual_weaver/exports` or `outputs/exports`.
 
 ## Claim Rules
 
 - OpenBMB prize claim requires `minicpm_judge.status == "success"` in an export packet.
 - NVIDIA prize claim requires `nemotron_evidence.status == "success"` in an export packet.
 - LocateAnything supports the grounding story but does not replace Nemotron for the NVIDIA prize.
-- Tiny Titan can be claimed only from a successful public-demo export packet because each active public model is <=4B.
-- FLUX.2 Klein 9B and OFFELLIA/Gemma remain private research options only.
-- Modal is not claimed unless a real Modal job runs and is documented.
+- Tiny Titan can be claimed only from a successful sidecar export packet because each active sidecar model is <=4B.
+- Raven Quality Stack is the primary story: FLUX.2 Klein 9B, OFFELLIA Q4, LocateAnything, MiniCPM-V, Nemotron, MiniCPM5, FunctionGemma, and Kokoro are individually under 32B.
+- Modal is not claimed unless a real `netflix/void-model` or equivalent Modal job runs and is documented.
 
 ## Known Risks
 
 - GitHub CLI may fail behind proxy `127.0.0.1:9`; use local git status and HF verification when blocked.
-- Real FLUX generation depends on Space GPU availability and the public 4B runtime loading successfully.
+- Real FLUX generation depends on Space GPU availability and gated 9B access; the 4B sidecar exists to keep the demo useful without mislabeling the flagship lane.
 - OpenBMB and Nemotron endpoints are optional and must show `missing secret` rather than fake success when not configured.
 - Demo video and social post links must be added before final submission.
 

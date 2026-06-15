@@ -15,6 +15,7 @@ from typing import Any
 
 PINNED_LANES = {"image_generation", "grounding", "security"}
 ROTATABLE_LANES = {
+    "tiny_titan_sidecar",
     "private_image_research",
     "prompt_router",
     "taste_judge",
@@ -380,7 +381,7 @@ class WeaverModelRelay:
 
     def _decision_reason(self, primary: ModelRecord, strategy: str, public_demo: bool) -> str:
         if strategy == "license_safe_public":
-            return f"{primary.model_id} selected because it is public-demo safe and within helper budget."
+            return f"{primary.model_id} selected because it is license-safe and within helper budget."
         if strategy == "quota_saver":
             return f"{primary.model_id} selected to preserve provider quota and reuse cheaper metadata paths."
         if strategy == "latency_first":
@@ -431,18 +432,32 @@ class WeaverModelRelay:
 def default_model_records() -> list[ModelRecord]:
     return [
         ModelRecord(
-            model_id="flux2-klein-4b-public",
+            model_id="flux2-klein-9b-quality",
             lane="image_generation",
+            provider="hf",
+            repo_id="black-forest-labs/FLUX.2-klein-9B",
+            license_gate="review_required",
+            params_b=9.0,
+            cost_hint="gated_provider_or_quality_space",
+            rpm_limit=6,
+            rpd_limit=40,
+            quality_score=0.97,
+            latency_ms=26000,
+            pinned=True,
+        ),
+        ModelRecord(
+            model_id="flux2-klein-4b-tiny-sidecar",
+            lane="tiny_titan_sidecar",
             provider="hf",
             repo_id="black-forest-labs/FLUX.2-klein-4B",
             license_gate="apache-2.0",
             params_b=4.0,
-            cost_hint="provider_or_local",
+            cost_hint="public_fallback_or_tiny_titan_export",
             rpm_limit=8,
             rpd_limit=60,
             quality_score=0.92,
             latency_ms=21000,
-            pinned=True,
+            fallback_chain=("flux2-klein-9b-quality",),
         ),
         ModelRecord(
             model_id="flux2-klein-9b-private",
@@ -451,11 +466,12 @@ def default_model_records() -> list[ModelRecord]:
             repo_id="black-forest-labs/FLUX.2-klein-9B",
             license_gate="review_required",
             params_b=9.0,
-            cost_hint="gated_provider_or_private_space",
+            cost_hint="legacy_quality_alias",
             rpm_limit=6,
             rpd_limit=40,
             quality_score=0.96,
             latency_ms=26000,
+            health="excluded",
         ),
         ModelRecord(
             model_id="locateanything-3b-anchor",
@@ -758,13 +774,13 @@ def default_model_records() -> list[ModelRecord]:
             model_id="netflix-void-modal",
             lane="video_repair",
             provider="modal",
-            repo_id="Netflix/VOID",
-            license_gate="private_research",
-            params_b=1.3,
-            cost_hint="modal_credits",
-            rpm_limit=10,
-            rpd_limit=120,
-            quality_score=0.84,
+            repo_id="netflix/void-model",
+            license_gate="apache-2.0",
+            params_b=5.0,
+            cost_hint="modal_credits_40gb_vram",
+            rpm_limit=4,
+            rpd_limit=30,
+            quality_score=0.88,
             latency_ms=12000,
             fallback_chain=("void-q5-offline",),
         ),
@@ -772,9 +788,9 @@ def default_model_records() -> list[ModelRecord]:
             model_id="void-q5-offline",
             lane="video_repair",
             provider="local",
-            repo_id="local/VOID-Q5-video-repair",
+            repo_id="local/netflix-void-q5-video-repair",
             license_gate="private_research",
-            params_b=1.3,
+            params_b=5.0,
             cost_hint="offline",
             rpm_limit=20,
             rpd_limit=200,

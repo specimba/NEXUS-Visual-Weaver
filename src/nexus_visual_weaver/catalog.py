@@ -7,32 +7,30 @@ from .schema import AdapterRecipe, ModelCandidate
 MODEL_CATALOG: list[ModelCandidate] = [
     ModelCandidate(
         repo_id="black-forest-labs/FLUX.2-klein-4B",
-        role="image_generator",
+        role="tiny_titan_sidecar_image_generator",
         task="image-to-image",
         params_b=4.0,
-        runtime="diffusers / provider",
+        runtime="diffusers / public fallback",
         license="apache-2.0",
         source_url="https://hf.co/black-forest-labs/FLUX.2-klein-4B",
     ),
     ModelCandidate(
         repo_id="black-forest-labs/FLUX.2-klein-9B",
-        role="private_research_image_generator",
+        role="quality_image_generator",
         task="image-to-image",
         params_b=9.0,
-        runtime="diffusers / gated provider",
+        runtime="diffusers / gated quality lane",
         license="other",
         gated=True,
-        public_demo=False,
         source_url="https://hf.co/black-forest-labs/FLUX.2-klein-9B",
     ),
     ModelCandidate(
         repo_id="Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
-        role="private_research_multimodal_judge",
+        role="quality_multimodal_judge",
         task="image-text-to-text",
         params_b=12.0,
         runtime="llama.cpp GGUF",
         license="apache-2.0",
-        public_demo=False,
         source_url="https://hf.co/Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
     ),
     ModelCandidate(
@@ -82,13 +80,41 @@ MODEL_CATALOG: list[ModelCandidate] = [
     ),
     ModelCandidate(
         repo_id="Brunobkr/OFFELLIA_IQ4_XS_gemma-4-12B-it-heretic",
-        role="adult_mode_text_judge",
+        role="adult_private_research_text_judge",
         task="text-generation",
         params_b=12.0,
         runtime="llama.cpp GGUF",
         license="other",
         adult_only=True,
         source_url="https://hf.co/Brunobkr/OFFELLIA_IQ4_XS_gemma-4-12B-it-heretic",
+    ),
+    ModelCandidate(
+        repo_id="hexgrad/Kokoro-82M",
+        role="audio_lore_tts",
+        task="text-to-speech",
+        params_b=0.082,
+        runtime="local / provider",
+        license="apache-2.0",
+        source_url="https://hf.co/hexgrad/Kokoro-82M",
+    ),
+    ModelCandidate(
+        repo_id="ResembleAI/chatterbox",
+        role="audio_lore_tts_optional",
+        task="text-to-speech",
+        params_b=0.5,
+        runtime="provider / Modal",
+        license="mit",
+        source_url="https://hf.co/ResembleAI/chatterbox",
+    ),
+    ModelCandidate(
+        repo_id="netflix/void-model",
+        role="modal_video_repair",
+        task="video-to-video",
+        params_b=5.0,
+        runtime="Modal / 40GB+ VRAM",
+        license="apache-2.0",
+        public_demo=False,
+        source_url="https://hf.co/netflix/void-model",
     ),
     ModelCandidate(
         repo_id="Wan-AI/Wan2.2-I2V-A14B-Diffusers",
@@ -169,23 +195,29 @@ ADAPTER_CATALOG: list[AdapterRecipe] = [
     ),
 ]
 
-DEFAULT_ACTIVE_STACK = [
-    "black-forest-labs/FLUX.2-klein-4B",
-    "nvidia/LocateAnything-3B",
-    "openbmb/MiniCPM-V-4.6",
-    "nvidia/NVIDIA-Nemotron-Parse-v1.2",
-    "openbmb/MiniCPM5-1B",
-    "onnx-community/functiongemma-270m-it-ONNX",
-]
-
-PRIVATE_RESEARCH_STACK = [
+RAVEN_QUALITY_STACK = [
     "black-forest-labs/FLUX.2-klein-9B",
     "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
     "nvidia/LocateAnything-3B",
     "openbmb/MiniCPM-V-4.6",
     "nvidia/NVIDIA-Nemotron-Parse-v1.2",
     "openbmb/MiniCPM5-1B",
+    "onnx-community/functiongemma-270m-it-ONNX",
+    "hexgrad/Kokoro-82M",
 ]
+
+TINY_TITAN_STACK = [
+    "black-forest-labs/FLUX.2-klein-4B",
+    "nvidia/LocateAnything-3B",
+    "openbmb/MiniCPM-V-4.6",
+    "nvidia/NVIDIA-Nemotron-Parse-v1.2",
+    "openbmb/MiniCPM5-1B",
+    "onnx-community/functiongemma-270m-it-ONNX",
+    "hexgrad/Kokoro-82M",
+]
+
+DEFAULT_ACTIVE_STACK = RAVEN_QUALITY_STACK
+PRIVATE_RESEARCH_STACK = RAVEN_QUALITY_STACK
 
 
 def filter_catalog(adult_mode: bool = False) -> tuple[list[ModelCandidate], list[AdapterRecipe]]:
@@ -201,8 +233,12 @@ def filter_catalog(adult_mode: bool = False) -> tuple[list[ModelCandidate], list
 def active_stack(adult_mode: bool = False) -> list[ModelCandidate]:
     allowed, _ = filter_catalog(adult_mode)
     by_id = {model.repo_id: model for model in allowed}
-    stack_ids = PRIVATE_RESEARCH_STACK if adult_mode else DEFAULT_ACTIVE_STACK
-    return [by_id[repo_id] for repo_id in stack_ids if repo_id in by_id]
+    return [by_id[repo_id] for repo_id in RAVEN_QUALITY_STACK if repo_id in by_id]
+
+
+def tiny_titan_stack() -> list[ModelCandidate]:
+    by_id = {model.repo_id: model for model in MODEL_CATALOG}
+    return [by_id[repo_id] for repo_id in TINY_TITAN_STACK if repo_id in by_id]
 
 
 def parameter_budget(stack: list[ModelCandidate] | None = None) -> dict[str, float | str]:
@@ -223,5 +259,7 @@ def catalog_summary(adult_mode: bool = False) -> dict[str, int | float | str]:
         "models_visible": len(models),
         "adapters_visible": len(adapters),
         "adult_catalog": "enabled" if adult_mode else "hidden",
+        "active_preset": "Raven Quality Stack",
+        "tiny_titan": "sidecar",
         **budget,
     }

@@ -11,19 +11,20 @@ def test_pinned_lanes_do_not_rotate() -> None:
     assert decision.pinned is True
     assert decision.rotatable is False
     assert decision.primary is not None
-    assert decision.primary.repo_id == "black-forest-labs/FLUX.2-klein-4B"
-    assert decision.primary.params_b == 4.0
+    assert decision.primary.repo_id == "black-forest-labs/FLUX.2-klein-9B"
+    assert decision.primary.params_b == 9.0
     assert decision.fallbacks == []
     assert "rotation disabled" in decision.reason
 
 
-def test_private_image_research_keeps_flux_9b_available() -> None:
+def test_tiny_titan_sidecar_keeps_flux_4b_available() -> None:
     relay = WeaverModelRelay()
-    decision = relay.select_lane("private_image_research", budget=9.0, public_demo=False, strategy="private_research")
+    decision = relay.select_lane("tiny_titan_sidecar", budget=4.0, public_demo=True, strategy="license_safe_public")
 
     assert decision.primary is not None
-    assert decision.primary.repo_id == "black-forest-labs/FLUX.2-klein-9B"
+    assert decision.primary.repo_id == "black-forest-labs/FLUX.2-klein-4B"
     assert decision.primary.pinned is False
+    assert decision.primary.params_b == 4.0
 
 
 def test_public_private_taste_judge_respects_license_and_budget() -> None:
@@ -123,7 +124,8 @@ def test_dashboard_surfaces_gmr_pinned_models_and_fallbacks() -> None:
     html = render_dashboard(relay_status=relay.dashboard_snapshot(public_demo=True))
 
     assert "GMR ModelRelay" in html
-    assert "FLUX.2 4B pinned" in html
+    assert "FLUX.2 9B pinned" in html
+    assert "4B sidecar" in html
     assert "LocateAnything pinned" in html
     assert "fallback:" in html
     assert "Rotation Safe" in html
@@ -135,6 +137,8 @@ def test_optional_external_gateways_are_registered_but_excluded_by_default() -> 
     assert relay.records["netlify-ai-gateway-helper"].provider == "netlify"
     assert relay.records["cloudflare-agent-helper"].provider == "cloudflare"
     assert relay.records["fal-media-adapter"].provider == "fal"
+    assert relay.records["netflix-void-modal"].repo_id == "netflix/void-model"
+    assert relay.records["netflix-void-modal"].params_b == 5.0
     assert relay.records["netflix-void-modal"].health == "healthy"
     assert relay.records["netlify-ai-gateway-helper"].health == "excluded"
     assert relay.records["fal-media-adapter"].health == "excluded"
@@ -184,27 +188,27 @@ def test_private_image_research_lane_is_rotatable() -> None:
     assert "private_image_research" in ROTATABLE_LANES
 
 
-def test_flux2_klein_4b_is_pinned_with_apache_license() -> None:
+def test_flux2_klein_9b_is_pinned_quality_lane() -> None:
     relay = WeaverModelRelay()
 
-    record = relay.records["flux2-klein-4b-public"]
+    record = relay.records["flux2-klein-9b-quality"]
 
     assert record.lane == "image_generation"
     assert record.pinned is True
-    assert record.params_b == 4.0
-    assert record.license_gate == "apache-2.0"
-    assert record.repo_id == "black-forest-labs/FLUX.2-klein-4B"
-
-
-def test_flux2_klein_9b_is_not_pinned_and_in_private_research() -> None:
-    relay = WeaverModelRelay()
-
-    record = relay.records["flux2-klein-9b-private"]
-
-    assert record.lane == "private_image_research"
-    assert record.pinned is False
     assert record.params_b == 9.0
     assert record.license_gate == "review_required"
+    assert record.repo_id == "black-forest-labs/FLUX.2-klein-9B"
+
+
+def test_flux2_klein_4b_is_tiny_titan_sidecar() -> None:
+    relay = WeaverModelRelay()
+
+    record = relay.records["flux2-klein-4b-tiny-sidecar"]
+
+    assert record.lane == "tiny_titan_sidecar"
+    assert record.pinned is False
+    assert record.params_b == 4.0
+    assert record.license_gate == "apache-2.0"
 
 
 def test_minicpm_has_fallback_chain_configured() -> None:

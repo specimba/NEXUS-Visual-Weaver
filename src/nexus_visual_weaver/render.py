@@ -113,12 +113,13 @@ def render_command_header() -> str:
       <div>
         <small>COMMAND INPUT</small>
         <strong>Raven Chronicle Active Weave</strong>
-        <span>Prompt, reference scan, model route, and checkpoint controls stay in one sticky operator strip.</span>
+        <span>Quality stack, reference grounding, model evidence, and checkpoint controls stay in one sticky operator strip.</span>
       </div>
       <div class="nw-command-pills">
-        {badge("SFW DEFAULT", "pass")}
+        {badge("RAVEN QUALITY STACK", "pass")}
         {badge("ST3GG ALWAYS ON", "cyan")}
-        {badge("FLUX.2 4B PINNED", "accent")}
+        {badge("FLUX.2 9B PINNED", "accent")}
+        {badge("4B TINY SIDECAR", "muted")}
         {badge("HUMAN CHECKPOINT", "warn")}
       </div>
     </section>
@@ -181,7 +182,7 @@ def render_topbar(
     <div class="nw-topbar">
       <div class="nw-brand"><span>NEXUS</span><strong>Visual Weaver</strong></div>
       <div class="nw-topitem"><small>Project</small><strong>Raven Chronicle</strong><i></i></div>
-      <div class="nw-topitem"><small>Active Preset</small><strong>Dark Couture v2.4</strong><i></i></div>
+      <div class="nw-topitem"><small>Active Preset</small><strong>Raven Quality Stack</strong><i></i></div>
       <div class="nw-budget">
         <div><strong>32B Parameter Budget</strong><small>{active:.2f}B / 32B ({pct}%)</small></div>
         <div class="nw-meter"><i style="width:{pct}%"></i></div>
@@ -256,7 +257,7 @@ def render_workflow(run: GenerationRun | None = None, operator_state: dict | Non
         "refine": (275, 52, 185, 160, "Refine", ["Prompt Refiner", "Style Harmonizer", "Negative Purge"], "Qwen2.5-7B", "complete", "violet"),
         "judge": (540, 52, 185, 160, "Judge", ["Aesthetic Scorer", "ST3GG Policy Filter", f"Score {score:.2f}"], "MiniCPM / Nemotron", "complete", "blue"),
         "locate": (785, 52, 185, 160, "Locate", ["Reference Locator", "Pose & Composition", "IP-Adapter"], "Refs 3/5", "complete", "cyan"),
-        "generate": (275, 280, 235, 210, "Generate", ["Image / Video Generation", "FLUX.2 4B + adapter stack", "High-detail couture"], "Steps 4  CFG 1.0", "ready", "green"),
+        "generate": (275, 280, 235, 210, "Generate", ["Image / Video Generation", "FLUX.2 9B quality lane", "High-detail couture"], "Steps 4  CFG 1.0", "ready", "green"),
         "video": (590, 280, 235, 210, "Video Path", ["Image to Video", "Frame interpolation", run.video.preset if run else "Wan2.2 / LTX swap"], "Duration 5.6s  24fps", "ready", "blue"),
         "checkpoint": (880, 285, 185, 185, "Human Checkpoint", ["Human review required", "Verify intent, vibe,", "and output before final."], "Review Now", "paused", "amber"),
     }
@@ -569,7 +570,7 @@ def _render_relay_panel(relay_status: dict | None = None) -> str:
     <h3>GMR ModelRelay</h3>
     <ul class="nw-relay">{rows}</ul>
     <div class="nw-relay-foot">
-      {badge("FLUX.2 4B pinned", "pass")} {badge("LocateAnything pinned", "pass")} {badge(f"dedup hits {dedup_hits}", "muted")}
+      {badge("FLUX.2 9B pinned", "pass")} {badge("4B sidecar", "muted")} {badge("LocateAnything pinned", "pass")} {badge(f"dedup hits {dedup_hits}", "muted")}
     </div>
     """
 
@@ -590,6 +591,7 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
     optional_statuses = {
         "openbmb": "configured" if _provider_configured("MINICPM_BASE_URL", "MINICPM_API_KEY", "OPENBMB_API_KEY") else "missing secret",
         "nvidia": "configured" if _provider_configured("NEMOTRON_BASE_URL", "NEMOTRON_API_KEY", "NVIDIA_API_KEY") else "missing secret",
+        "modal": "configured" if _env_configured("MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET") else "deferred",
         "fal": "configured" if _env_configured("FAL_KEY") else "blocked",
         "netlify": "configured" if _env_configured("NETLIFY_AUTH_TOKEN", "NETLIFY_SITE_ID", "OPENAI_BASE_URL") else "blocked",
         "cloudflare": "configured" if _env_configured("CLOUDFLARE_API_TOKEN", "CF_ACCOUNT_ID") else "blocked",
@@ -626,9 +628,9 @@ def render_provider_cards(relay_status: dict | None = None, adult_mode: bool = F
             <div class="nw-provider-card nw-provider-optional">
               <small>optional gateway</small>
               <strong>{escape(provider.title())}</strong>
-              <span>off by default / secrets required</span>
-              <i class="nw-provider-meter" style="--health:{'74' if state == 'configured' else '18'}"></i>
-              <div>{badge(state.upper(), "pass" if state == "configured" else "warn")}{badge("SPONSOR LANE" if provider in {"openbmb", "nvidia", "hf_nvidia"} else "NOT MVP DEFAULT", "muted")}</div>
+              <span>{"VOID repair job / Modal credit lane" if provider == "modal" else "off by default / secrets required"}</span>
+              <i class="nw-provider-meter" style="--health:{'74' if state == 'configured' else '42' if state == 'deferred' else '18'}"></i>
+              <div>{badge(state.upper(), "pass" if state == "configured" else "muted" if state == "deferred" else "warn")}{badge("SPONSOR LANE" if provider in {"openbmb", "nvidia", "hf_nvidia", "modal"} else "NOT MVP DEFAULT", "muted")}</div>
             </div>
             """
         )
@@ -673,7 +675,7 @@ def render_inspector(
         scan_status = (scan or {}).get("status", "pass")
     else:
         checks = [(label, True) for label in ["Patent Leather", "Faux Fur", "Lace / Mesh", "Crimson Hardware", "Platform Boots", "Layered Garments"]]
-        model_rows = "<li><span>active stack</span><strong>FLUX.2 4B / MiniCPM / LocateAnything</strong></li>"
+        model_rows = "<li><span>active stack</span><strong>FLUX.2 9B / OFFELLIA / LocateAnything</strong></li>"
         score = 86
         scan_status = (scan or {}).get("status", "pass")
     checks_html = "".join(f'<li><span>{"✓" if ok else "!"}</span>{escape(label)}</li>' for label, ok in checks)
@@ -682,11 +684,19 @@ def render_inspector(
     operator_state = operator_state or {}
     minicpm = operator_state.get("minicpm_judge") or {}
     nemotron = operator_state.get("nemotron_evidence") or {}
+    offellia = operator_state.get("offellia_judge") or {}
+    modal = operator_state.get("modal_video_repair") or {}
+    tts = operator_state.get("audio_lore_tts") or {}
+    locate = operator_state.get("locateanything_grounding") or {}
     sponsor_rows = "".join(
         f"<li><span>{escape(label)}</span><strong>{escape(str(result.get('status', 'pending')).upper())}</strong><em>{escape(str(result.get('repo_id', repo)))}</em></li>"
         for label, repo, result in [
+            ("OFFELLIA Quality Judge", "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf", offellia),
             ("OpenBMB MiniCPM", "openbmb/MiniCPM-V-4.6", minicpm),
             ("NVIDIA Nemotron", "nvidia/NVIDIA-Nemotron-Parse-v1.2", nemotron),
+            ("LocateAnything Grounding", "nvidia/LocateAnything-3B", locate),
+            ("Modal VOID Repair", "netflix/void-model", modal),
+            ("Audio Lore TTS", "hexgrad/Kokoro-82M", tts),
         ]
     )
     findings = [_redact_scan_text(item) for item in (scan.get("findings") or [])]
