@@ -522,19 +522,21 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
 
     operator_outputs = dashboard_outputs + [operator_state, stop_btn]
 
-    run_btn.click(
+    run_click = run_btn.click(
         fn=run_weave,
         inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav],
         outputs=stateful_outputs,
         api_name="run_active_weave",
         concurrency_limit=1,
+        concurrency_id="flux-gpu",
     )
-    prompt.submit(
+    run_submit = prompt.submit(
         fn=run_weave,
         inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav],
         outputs=stateful_outputs,
         api_name=False,
         concurrency_limit=1,
+        concurrency_id="flux-gpu",
     )
     adult_mode.change(
         fn=toggle_adult_visibility,
@@ -588,6 +590,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
         outputs=operator_outputs,
         api_name="stop_provider_job",
         queue=False,
+        cancels=[run_click, run_submit],
     )
     reset_btn.click(
         fn=reset_demo,
@@ -595,6 +598,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
         outputs=stateful_outputs,
         api_name="reset_demo_state",
         queue=False,
+        cancels=[run_click, run_submit],
     )
     demo.load(
         fn=lambda: (render_catalog_table(False), catalog_summary(False), scan_file(None), scan_file(None), _default_operator_state()),

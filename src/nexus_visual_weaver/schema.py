@@ -84,6 +84,11 @@ class AdapterRecipe:
     license: str = "unknown"
     adult_only: bool = False
     compatibility: str = "compatible"
+    weight_name: str | None = None
+    trigger_words: list[str] = field(default_factory=list)
+    compatible_repo_ids: list[str] = field(default_factory=list)
+    runtime_enabled: bool = True
+    requires_image: bool = False
 
 
 @dataclass(frozen=True)

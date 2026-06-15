@@ -11,9 +11,9 @@ def test_pinned_lanes_do_not_rotate() -> None:
     assert decision.pinned is True
     assert decision.rotatable is False
     assert decision.primary is not None
-    assert decision.primary.repo_id == "black-forest-labs/FLUX.2-klein-4B"
-    assert decision.primary.params_b == 4.0
-    assert decision.fallbacks == []
+    assert decision.primary.repo_id == "black-forest-labs/FLUX.2-klein-9B"
+    assert decision.primary.params_b == 9.0
+    assert [fallback.repo_id for fallback in decision.fallbacks] == ["black-forest-labs/FLUX.2-klein-4B"]
     assert "rotation disabled" in decision.reason
 
 
@@ -123,7 +123,8 @@ def test_dashboard_surfaces_gmr_pinned_models_and_fallbacks() -> None:
     html = render_dashboard(relay_status=relay.dashboard_snapshot(public_demo=True))
 
     assert "GMR ModelRelay" in html
-    assert "FLUX.2 4B pinned" in html
+    assert "FLUX.2 9B pinned" in html
+    assert "4B sidecar" in html
     assert "LocateAnything pinned" in html
     assert "fallback:" in html
     assert "Rotation Safe" in html
@@ -184,16 +185,20 @@ def test_private_image_research_lane_is_rotatable() -> None:
     assert "private_image_research" in ROTATABLE_LANES
 
 
-def test_flux2_klein_4b_is_pinned_with_apache_license() -> None:
+def test_flux2_klein_9b_is_pinned_with_4b_sidecar_fallback() -> None:
     relay = WeaverModelRelay()
 
-    record = relay.records["flux2-klein-4b-public"]
+    record = relay.records["flux2-klein-9b-quality"]
+    fallback = relay.records["flux2-klein-4b-sidecar"]
 
     assert record.lane == "image_generation"
     assert record.pinned is True
-    assert record.params_b == 4.0
-    assert record.license_gate == "apache-2.0"
-    assert record.repo_id == "black-forest-labs/FLUX.2-klein-4B"
+    assert record.params_b == 9.0
+    assert record.license_gate == "review_required"
+    assert record.repo_id == "black-forest-labs/FLUX.2-klein-9B"
+    assert "flux2-klein-4b-sidecar" in record.fallback_chain
+    assert fallback.repo_id == "black-forest-labs/FLUX.2-klein-4B"
+    assert fallback.pinned is False
 
 
 def test_flux2_klein_9b_is_not_pinned_and_in_private_research() -> None:

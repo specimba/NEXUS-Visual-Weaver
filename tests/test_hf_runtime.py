@@ -4,6 +4,7 @@ from nexus_visual_weaver.hf_runtime import (
     FLUX_REPO_ID,
     PRIVATE_RESEARCH_FLUX_REPO_ID,
     TINY_TITAN_FLUX_REPO_ID,
+    default_lora_repo_id,
     generate_flux_image,
     hf_runtime_enabled,
 )
@@ -21,12 +22,18 @@ def test_hf_runtime_is_disabled_locally_by_default(monkeypatch) -> None:
     assert result.status == "disabled"
     assert result.provider_state == "dry-run"
     assert result.repo_id == "black-forest-labs/FLUX.2-klein-9B"
+    assert result.lora_status == "disabled"
+    assert result.lora_repo_id == "DeverStyle/Flux.2-Klein-Loras"
 
 
 def test_flux_repo_ids_use_9b_with_4b_sidecar() -> None:
     assert FLUX_REPO_ID == "black-forest-labs/FLUX.2-klein-9B"
     assert PRIVATE_RESEARCH_FLUX_REPO_ID == "black-forest-labs/FLUX.2-klein-9B"
     assert TINY_TITAN_FLUX_REPO_ID == "black-forest-labs/FLUX.2-klein-4B"
+
+
+def test_default_lora_repo_id_prefers_runtime_enabled_compatible_adapter() -> None:
+    assert default_lora_repo_id("black-forest-labs/FLUX.2-klein-9B") == "DeverStyle/Flux.2-Klein-Loras"
 
 
 def test_artifact_lane_embeds_generated_image() -> None:

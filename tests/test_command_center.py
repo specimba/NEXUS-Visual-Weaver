@@ -213,7 +213,8 @@ def test_command_header_exposes_governed_run_controls() -> None:
 
     assert "Raven Chronicle Active Weave" in header
     assert "ST3GG ALWAYS ON" in header
-    assert "FLUX.2 4B PINNED" in header
+    assert "FLUX.2 9B PINNED" in header
+    assert "4B SIDECAR" in header
     assert "HUMAN CHECKPOINT" in header
 
 
@@ -359,7 +360,7 @@ def test_render_inspector_with_success_judge_shows_success_status() -> None:
 def test_render_inspector_shows_default_stack_label_without_run() -> None:
     html = render_inspector()
 
-    assert "FLUX.2 4B / MiniCPM / LocateAnything" in html
+    assert "FLUX.2 9B / MiniCPM / LocateAnything" in html
 
 
 # --- render_provider_cards sponsor lane tests ---
@@ -510,7 +511,5 @@ def test_public_demo_false_models_are_excluded_from_public_filter() -> None:
         license="other",
         public_demo=False,
     )
-    # public_demo=False should mean filter_catalog(False) excludes it
-    # The catalog-level test: verify FLUX 9B (public_demo=False) is absent
     models_public, _ = filter_catalog(False)
     assert all(m.public_demo for m in models_public)

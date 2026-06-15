@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
+
+from .catalog import ADAPTER_CATALOG
+from .lora_adapter import load_and_apply, unload_all
+from .schema import AdapterRecipe
 
 
 FLUX_REPO_ID = "black-forest-labs/FLUX.2-klein-9B"
 TINY_TITAN_FLUX_REPO_ID = "black-forest-labs/FLUX.2-klein-4B"
 PRIVATE_RESEARCH_FLUX_REPO_ID = FLUX_REPO_ID
 _PIPELINE_CACHE: dict[str, Any] = {}
+_PIPELINE_CACHE_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -27,6 +33,11 @@ class HFGenerationResult:
     height: int = 1024
     steps: int = 4
     hf_token_present: bool = False
+    lora_status: str = "disabled"
+    lora_repo_id: str | None = None
+    lora_message: str = "No LoRA adapter selected for this run."
+    fallback_used: bool = False
+    primary_error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -84,17 +95,43 @@ def _repo_candidates(repo_id: str) -> list[str]:
 
 
 def _get_flux_pipe(repo_id: str, torch_module: Any, pipeline_cls: Any, token: str | None) -> Any:
-    cached = _PIPELINE_CACHE.get(repo_id)
-    if cached is not None:
-        return cached
-    pipe = pipeline_cls.from_pretrained(repo_id, torch_dtype=torch_module.bfloat16, token=token)
-    pipe.enable_model_cpu_offload()
-    _PIPELINE_CACHE[repo_id] = pipe
-    return pipe
+    with _PIPELINE_CACHE_LOCK:
+        cached = _PIPELINE_CACHE.get(repo_id)
+        if cached is not None:
+            return cached
+        pipe = pipeline_cls.from_pretrained(repo_id, torch_dtype=torch_module.bfloat16, token=token)
+        pipe.enable_model_cpu_offload()
+        _PIPELINE_CACHE[repo_id] = pipe
+        return pipe
 
 
-def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height: int = 1024, steps: int = 4) -> HFGenerationResult:
+def _adapter_recipe(repo_id: str | None) -> AdapterRecipe | None:
+    if not repo_id:
+        return None
+    return next((recipe for recipe in ADAPTER_CATALOG if recipe.repo_id == repo_id), None)
+
+
+def default_lora_repo_id(target_repo_id: str) -> str | None:
+    for recipe in ADAPTER_CATALOG:
+        compatible_ids = {recipe.adapter_for, *recipe.compatible_repo_ids}
+        if recipe.runtime_enabled and not recipe.adult_only and not recipe.requires_image and target_repo_id in compatible_ids:
+            return recipe.repo_id
+    return None
+
+
+def generate_flux_image(
+    prompt: str,
+    *,
+    seed: int = 0,
+    width: int = 1024,
+    height: int = 1024,
+    steps: int = 4,
+    lora_repo_id: str | None = None,
+    adult_mode: bool = False,
+) -> HFGenerationResult:
     repo_id = active_flux_repo_id()
+    selected_lora = lora_repo_id if lora_repo_id is not None else default_lora_repo_id(repo_id)
+    recipe = _adapter_recipe(selected_lora)
     if not hf_runtime_enabled():
         return HFGenerationResult(
             status="disabled",
@@ -105,6 +142,9 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
             height=height,
             steps=steps,
             hf_token_present=bool(_hf_token()),
+            lora_status="disabled",
+            lora_repo_id=recipe.repo_id if recipe else None,
+            lora_message="LoRA loading requires the HF Space GPU runtime.",
         )
 
     started = time.perf_counter()
@@ -121,6 +161,9 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
             height=height,
             steps=steps,
             hf_token_present=bool(_hf_token()),
+            lora_status="disabled",
+            lora_repo_id=recipe.repo_id if recipe else None,
+            lora_message="FLUX runtime import failed before LoRA loading.",
         )
 
     if not torch.cuda.is_available():
@@ -133,6 +176,9 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
             height=height,
             steps=steps,
             hf_token_present=bool(_hf_token()),
+            lora_status="disabled",
+            lora_repo_id=recipe.repo_id if recipe else None,
+            lora_message="CUDA unavailable before LoRA loading.",
         )
 
     token = _hf_token()
@@ -142,16 +188,20 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
             pipe = _get_flux_pipe(candidate, torch, Flux2KleinPipeline, token)
             if hasattr(pipe, "set_progress_bar_config"):
                 pipe.set_progress_bar_config(disable=True)
+            lora_result = load_and_apply(pipe, recipe, candidate, adult_mode=adult_mode)
 
-            generator = torch.Generator(device="cuda").manual_seed(seed)
-            image = pipe(
-                prompt=prompt,
-                height=height,
-                width=width,
-                guidance_scale=1.0,
-                num_inference_steps=steps,
-                generator=generator,
-            ).images[0]
+            try:
+                generator = torch.Generator(device="cuda").manual_seed(seed)
+                image = pipe(
+                    prompt=prompt,
+                    height=height,
+                    width=width,
+                    guidance_scale=1.0,
+                    num_inference_steps=steps,
+                    generator=generator,
+                ).images[0]
+            finally:
+                unload_all(pipe)
             output_path = _output_dir() / f"nexus_flux_{int(time.time())}_{seed}.png"
             image.save(output_path)
             return HFGenerationResult(
@@ -165,10 +215,16 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
                 height=height,
                 steps=steps,
                 hf_token_present=bool(token),
+                lora_status=str(lora_result.get("status", "disabled")),
+                lora_repo_id=lora_result.get("repo_id"),
+                lora_message=str(lora_result.get("message", "")),
+                fallback_used=candidate != repo_id,
+                primary_error=errors[0] if candidate != repo_id and errors else None,
             )
         except Exception as exc:  # pragma: no cover - exercised on HF Space with gated/runtime conditions.
             errors.append(f"{candidate}: {_short_error(exc)}")
-            _PIPELINE_CACHE.pop(candidate, None)
+            with _PIPELINE_CACHE_LOCK:
+                _PIPELINE_CACHE.pop(candidate, None)
             continue
     return HFGenerationResult(
         status="error",
@@ -180,4 +236,7 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
         height=height,
         steps=steps,
         hf_token_present=bool(_hf_token()),
+        lora_status="disabled" if recipe is None else "failed",
+        lora_repo_id=recipe.repo_id if recipe else None,
+        lora_message="Generation failed before a usable LoRA evidence state could be produced.",
     )

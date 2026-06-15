@@ -118,7 +118,8 @@ def render_command_header() -> str:
       <div class="nw-command-pills">
         {badge("SFW DEFAULT", "pass")}
         {badge("ST3GG ALWAYS ON", "cyan")}
-        {badge("FLUX.2 4B PINNED", "accent")}
+        {badge("FLUX.2 9B PINNED", "accent")}
+        {badge("4B SIDECAR", "cyan")}
         {badge("HUMAN CHECKPOINT", "warn")}
       </div>
     </section>
@@ -256,7 +257,7 @@ def render_workflow(run: GenerationRun | None = None, operator_state: dict | Non
         "refine": (275, 52, 185, 160, "Refine", ["Prompt Refiner", "Style Harmonizer", "Negative Purge"], "Qwen2.5-7B", "complete", "violet"),
         "judge": (540, 52, 185, 160, "Judge", ["Aesthetic Scorer", "ST3GG Policy Filter", f"Score {score:.2f}"], "MiniCPM / Nemotron", "complete", "blue"),
         "locate": (785, 52, 185, 160, "Locate", ["Reference Locator", "Pose & Composition", "IP-Adapter"], "Refs 3/5", "complete", "cyan"),
-        "generate": (275, 280, 235, 210, "Generate", ["Image / Video Generation", "FLUX.2 4B + adapter stack", "High-detail couture"], "Steps 4  CFG 1.0", "ready", "green"),
+        "generate": (275, 280, 235, 210, "Generate", ["Image / Video Generation", "FLUX.2 9B + adapter stack", "4B sidecar fallback"], "Steps 4  CFG 1.0", "ready", "green"),
         "video": (590, 280, 235, 210, "Video Path", ["Image to Video", "Frame interpolation", run.video.preset if run else "Wan2.2 / LTX swap"], "Duration 5.6s  24fps", "ready", "blue"),
         "checkpoint": (880, 285, 185, 185, "Human Checkpoint", ["Human review required", "Verify intent, vibe,", "and output before final."], "Review Now", "paused", "amber"),
     }
@@ -569,7 +570,7 @@ def _render_relay_panel(relay_status: dict | None = None) -> str:
     <h3>GMR ModelRelay</h3>
     <ul class="nw-relay">{rows}</ul>
     <div class="nw-relay-foot">
-      {badge("FLUX.2 4B pinned", "pass")} {badge("LocateAnything pinned", "pass")} {badge(f"dedup hits {dedup_hits}", "muted")}
+      {badge("FLUX.2 9B pinned", "pass")} {badge("4B sidecar", "cyan")} {badge("LocateAnything pinned", "pass")} {badge(f"dedup hits {dedup_hits}", "muted")}
     </div>
     """
 
@@ -673,7 +674,7 @@ def render_inspector(
         scan_status = (scan or {}).get("status", "pass")
     else:
         checks = [(label, True) for label in ["Patent Leather", "Faux Fur", "Lace / Mesh", "Crimson Hardware", "Platform Boots", "Layered Garments"]]
-        model_rows = "<li><span>active stack</span><strong>FLUX.2 4B / MiniCPM / LocateAnything</strong></li>"
+        model_rows = "<li><span>active stack</span><strong>FLUX.2 9B / MiniCPM / LocateAnything</strong></li>"
         score = 86
         scan_status = (scan or {}).get("status", "pass")
     checks_html = "".join(f'<li><span>{"✓" if ok else "!"}</span>{escape(label)}</li>' for label, ok in checks)

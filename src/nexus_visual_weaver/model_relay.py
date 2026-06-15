@@ -188,11 +188,12 @@ class WeaverModelRelay:
         lane_records = [record for record in self.records.values() if record.lane == lane]
         if lane in PINNED_LANES:
             primary = next((record for record in lane_records if record.pinned), None)
+            fallbacks = [self.records[model_id] for model_id in (primary.fallback_chain if primary else ()) if model_id in self.records]
             return LaneDecision(
                 lane=lane,
                 strategy="pinned",
                 primary=primary,
-                fallbacks=[],
+                fallbacks=fallbacks,
                 reason="Pinned core lane; rotation disabled for creative identity, grounding, or security.",
                 expected_cost_hint=primary.cost_hint if primary else "unavailable",
                 quota_impact=self._quota_impact(primary, now) if primary else {},
@@ -431,7 +432,22 @@ class WeaverModelRelay:
 def default_model_records() -> list[ModelRecord]:
     return [
         ModelRecord(
-            model_id="flux2-klein-4b-public",
+            model_id="flux2-klein-9b-quality",
+            lane="image_generation",
+            provider="hf",
+            repo_id="black-forest-labs/FLUX.2-klein-9B",
+            license_gate="review_required",
+            params_b=9.0,
+            cost_hint="gated_provider_or_private_space",
+            rpm_limit=6,
+            rpd_limit=40,
+            quality_score=0.96,
+            latency_ms=26000,
+            pinned=True,
+            fallback_chain=("flux2-klein-4b-sidecar",),
+        ),
+        ModelRecord(
+            model_id="flux2-klein-4b-sidecar",
             lane="image_generation",
             provider="hf",
             repo_id="black-forest-labs/FLUX.2-klein-4B",
@@ -442,7 +458,6 @@ def default_model_records() -> list[ModelRecord]:
             rpd_limit=60,
             quality_score=0.92,
             latency_ms=21000,
-            pinned=True,
         ),
         ModelRecord(
             model_id="flux2-klein-9b-private",
@@ -456,6 +471,19 @@ def default_model_records() -> list[ModelRecord]:
             rpd_limit=40,
             quality_score=0.96,
             latency_ms=26000,
+        ),
+        ModelRecord(
+            model_id="offellia-gemma4-12b-private-image-judge",
+            lane="private_image_research",
+            provider="local",
+            repo_id="Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
+            license_gate="private_research",
+            params_b=12.0,
+            cost_hint="local_gpu",
+            rpm_limit=20,
+            rpd_limit=200,
+            quality_score=0.95,
+            latency_ms=4200,
         ),
         ModelRecord(
             model_id="locateanything-3b-anchor",

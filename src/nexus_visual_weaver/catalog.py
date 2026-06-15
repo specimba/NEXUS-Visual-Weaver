@@ -112,27 +112,43 @@ MODEL_CATALOG: list[ModelCandidate] = [
 ADAPTER_CATALOG: list[AdapterRecipe] = [
     AdapterRecipe(
         repo_id="DeverStyle/Flux.2-Klein-Loras",
-        adapter_for="black-forest-labs/FLUX.2-klein-4B",
+        adapter_for="black-forest-labs/FLUX.2-klein-9B",
         task="text-to-image style stack",
         license="apache-2.0",
+        trigger_words=["gothic couture", "structured garment"],
+        compatible_repo_ids=[
+            "black-forest-labs/FLUX.2-klein-9B",
+            "black-forest-labs/FLUX.2-klein-4B",
+        ],
     ),
     AdapterRecipe(
         repo_id="fal/flux-2-klein-4B-outpaint-lora",
         adapter_for="black-forest-labs/FLUX.2-klein-4B",
         task="outpaint/inpaint public demo helper",
         license="apache-2.0",
+        compatible_repo_ids=["black-forest-labs/FLUX.2-klein-4B"],
+        requires_image=True,
     ),
     AdapterRecipe(
         repo_id="thedeoxen/refcontrol-FLUX.2-klein-4B-reference-depth-lora",
         adapter_for="black-forest-labs/FLUX.2-klein-base-4B",
         task="reference-depth control for garment layout",
         license="apache-2.0",
+        compatible_repo_ids=[
+            "black-forest-labs/FLUX.2-klein-base-4B",
+            "black-forest-labs/FLUX.2-klein-4B",
+        ],
+        requires_image=True,
     ),
     AdapterRecipe(
         repo_id="nomadoor/flux-2-klein-9B-schematic-lora",
         adapter_for="black-forest-labs/FLUX.2-klein-base-9B",
         task="pose/depth/segmentation schematic control",
         license="other",
+        compatible_repo_ids=[
+            "black-forest-labs/FLUX.2-klein-base-9B",
+            "black-forest-labs/FLUX.2-klein-9B",
+        ],
     ),
     AdapterRecipe(
         repo_id="fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA",
