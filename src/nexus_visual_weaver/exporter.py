@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .catalog import active_stack, parameter_budget
@@ -19,6 +20,12 @@ ALLOWED_LOCAL_EXPORT_ROOTS = (
 
 
 def _is_within(path: Path, root: Path) -> bool:
+    """
+    Checks if a path is within a given root directory.
+    
+    Returns:
+        True if the path is within the root directory, False otherwise.
+    """
     try:
         path.relative_to(root)
         return True
@@ -27,6 +34,12 @@ def _is_within(path: Path, root: Path) -> bool:
 
 
 def _safe_export_candidate(candidate: Path) -> Path | None:
+    """
+    Validates and resolves an export directory candidate against allowed roots.
+    
+    Returns:
+        Path | None: The resolved path if within an allowed export root, `None` otherwise.
+    """
     if not candidate.is_absolute():
         candidate = REPO_ROOT / candidate
     resolved = candidate.resolve(strict=False)
@@ -43,12 +56,156 @@ def _safe_export_candidate(candidate: Path) -> Path | None:
 
 
 def _artifact_name(output_path: Any) -> str | None:
+    """
+    Extract the filename from a file path.
+    
+    Returns:
+        filename (str | None): The filename if output_path is provided, None otherwise.
+    """
     if not output_path:
         return None
     return Path(str(output_path)).name
 
 
+SENSITIVE_KEY_RE = re.compile(r"(token|secret|api[_-]?key|authorization|payload_excerpt|raw|base64|bytes)", re.IGNORECASE)
+SECRET_VALUE_RE = re.compile(r"(hf_[A-Za-z0-9]{20,}|Bearer [A-Za-z0-9._-]+|sk-[A-Za-z0-9_-]{20,})")
+CREDENTIAL_NAME_RE = re.compile(r"\b[A-Z0-9_]*(?:API_KEY|TOKEN|SECRET)[A-Z0-9_]*\b")
+WINDOWS_PATH_RE = re.compile(r"[A-Za-z]:[\\/][^\s\"']+")
+
+
+def _sanitize_text(value: str) -> str:
+    """
+    Redacts sensitive information and normalizes text for safe export.
+    
+    Returns:
+        str: Text with secrets, credentials, and paths replaced with placeholders, truncated to 1000 characters if necessary.
+    """
+    text = SECRET_VALUE_RE.sub("[redacted_secret]", value)
+    text = CREDENTIAL_NAME_RE.sub("[redacted_credential_name]", text)
+    text = WINDOWS_PATH_RE.sub(lambda match: f"[local_path]/{PureWindowsPath(match.group(0)).name}", text)
+    repo_text = str(REPO_ROOT)
+    if repo_text in text:
+        text = text.replace(repo_text, "[repo]")
+    if "/data/" in text:
+        text = text.replace("/data/", "[data]/")
+    if len(text) > 1000:
+        text = text[:997] + "..."
+    return text
+
+
+def _safe_dict(value: Any, *, allow_size_bytes: bool = False) -> Any:
+    """
+    Recursively sanitize data structures to remove sensitive keys and redact sensitive values.
+    
+    Dictionary keys matching sensitive patterns are dropped unless the key is 'size_bytes' and 
+    allow_size_bytes is True. Lists are limited to the first 40 elements. String values are sanitized 
+    to remove secrets and credentials. Other types are returned unchanged.
+    
+    Parameters:
+    	allow_size_bytes (bool): If True, preserves the 'size_bytes' key in dictionaries even if it 
+    		matches a sensitive pattern. Defaults to False.
+    
+    Returns:
+    	The sanitized input value with sensitive data redacted and sensitive keys removed.
+    """
+    if isinstance(value, dict):
+        clean: dict[str, Any] = {}
+        for key, item in value.items():
+            key_str = str(key)
+            if SENSITIVE_KEY_RE.search(key_str) and not (allow_size_bytes and key_str == "size_bytes"):
+                continue
+            clean[key_str] = _safe_dict(item, allow_size_bytes=allow_size_bytes)
+        return clean
+    if isinstance(value, list):
+        return [_safe_dict(item, allow_size_bytes=allow_size_bytes) for item in value[:40]]
+    if isinstance(value, str):
+        return _sanitize_text(value)
+    return value
+
+
+def _safe_scan(scan: dict[str, Any]) -> dict[str, Any]:
+    """
+    Extract and sanitize selected fields from a scan dictionary.
+    
+    Returns:
+        A dictionary containing status, scanner, export_gate, extension, magic, 
+        findings, and purification_actions.
+    """
+    return {
+        "status": scan.get("status"),
+        "scanner": scan.get("scanner"),
+        "export_gate": scan.get("export_gate"),
+        "extension": scan.get("extension"),
+        "magic": scan.get("magic"),
+        "findings": _safe_dict(scan.get("findings") or []),
+        "purification_actions": _safe_dict(scan.get("purification_actions") or []),
+    }
+
+
+def _safe_provider(provider: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    Normalize provider metadata by extracting safe fields and sanitizing sensitive data.
+    
+    Parameters:
+        provider: Provider metadata dict, or None.
+    
+    Returns:
+        Normalized provider dict with extracted and sanitized fields.
+    """
+    provider = provider or {}
+    evidence = provider.get("evidence") if isinstance(provider.get("evidence"), dict) else {}
+    return {
+        "status": provider.get("status"),
+        "provider_state": provider.get("provider_state"),
+        "provider": provider.get("provider"),
+        "repo_id": provider.get("repo_id"),
+        "model": provider.get("model"),
+        "message": _safe_dict(provider.get("message", "")),
+        "evidence": _safe_dict(evidence),
+        "latency_seconds": provider.get("latency_seconds"),
+    }
+
+
+def _safe_reference_metadata(records: Any) -> list[dict[str, Any]]:
+    """
+    Filters and sanitizes reference metadata records.
+    
+    Returns:
+        A list of sanitized reference metadata dicts, limited to the first 20 records.
+    """
+    if not isinstance(records, list):
+        return []
+    cleaned: list[dict[str, Any]] = []
+    for record in records[:20]:
+        if not isinstance(record, dict):
+            continue
+        cleaned.append(
+            {
+                "source": record.get("source"),
+                "status": record.get("status"),
+                "basename": _artifact_name(record.get("basename")) if record.get("basename") else None,
+                "sha256": record.get("sha256"),
+                "size_bytes": record.get("size_bytes"),
+                "st3gg_status": record.get("st3gg_status"),
+                "export_gate": record.get("export_gate"),
+                "magic": record.get("magic"),
+                "extension": record.get("extension"),
+                "domain": record.get("domain"),
+                "url_hash": record.get("url_hash"),
+                "message": _safe_dict(record.get("message", "")),
+            }
+        )
+    return cleaned
+
+
 def export_root() -> Path:
+    """
+    Selects and creates a permitted directory for writing export JSON packets.
+    
+    Returns:
+        Path: An existing export directory, prioritizing environment configuration
+            and system locations over the repository fallback.
+    """
     requested = os.environ.get("NEXUS_EXPORT_DIR")
     candidates = [Path(requested)] if requested else []
     if Path("/data").exists():
@@ -75,6 +232,19 @@ def write_export_packet(
     operator_state: dict[str, Any],
     adult_mode: bool,
 ) -> dict[str, Any]:
+    """
+    Builds a sanitized JSON export packet and writes it to disk.
+    
+    Sanitizes sensitive metadata from run, scan, and operator state, then writes the
+    resulting packet to a controlled export directory.
+    
+    Parameters:
+        run: Run object containing checkpoint, request, model_stack, and refined_prompt data.
+    
+    Returns:
+        Dictionary with "path" (str) pointing to the written JSON file and "packet" (dict)
+        containing the constructed export packet.
+    """
     run_id = getattr(getattr(run, "checkpoint", None), "checkpoint_id", f"nw-{int(time.time())}")
     run_adult_mode = bool(getattr(getattr(run, "request", None), "adult_mode", adult_mode))
     stack = list(getattr(run, "model_stack", None) or active_stack(run_adult_mode))
@@ -84,49 +254,56 @@ def write_export_packet(
     artifact = _artifact_name(generation.get("output_path"))
     if "output_path" in generation:
         generation["output_path"] = artifact
-    modal_job = operator_state.get("modal_video_repair") or {
-        "status": "deferred",
-        "repo_id": "netflix/void-model",
-        "provider": "modal",
+    generation = _safe_dict(generation)
+    creator_controls = _safe_dict(operator_state.get("creator_controls") or getattr(getattr(run, "request", None), "creator_controls", {}) or {})
+    reference_metadata = _safe_reference_metadata(operator_state.get("reference_metadata") or getattr(getattr(run, "request", None), "reference_metadata", []) or [])
+    st3gg_scan = _safe_scan(scan)
+    minicpm_judge = _safe_provider(operator_state.get("minicpm_judge") or {})
+    nemotron_evidence = _safe_provider(operator_state.get("nemotron_evidence") or {})
+    provider_states = {
+        "generation": generation.get("provider_state"),
+        "minicpm": minicpm_judge.get("status"),
+        "nemotron": nemotron_evidence.get("status"),
+        "operator": operator_state.get("provider_state"),
     }
-    audio_lore = operator_state.get("audio_lore_tts") or {
-        "status": "optional",
-        "repo_id": "hexgrad/Kokoro-82M",
-    }
-    offellia = operator_state.get("offellia_judge") or {
-        "status": "deferred_local",
-        "repo_id": "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
-    }
-    tiny_titan = operator_state.get("tiny_titan_sidecar") or {
-        "status": "available",
-        "repo_id": "black-forest-labs/FLUX.2-klein-4B",
-    }
-    locate_grounding = operator_state.get("locateanything_grounding") or {}
-    st3gg_override_reason = str(operator_state.get("st3gg_override_reason", "")).strip()
+    override_reason = _safe_dict(operator_state.get("st3gg_override_reason", ""))
     packet = {
         "schema": "nexus_visual_weaver.export_packet.v1",
         "run_id": run_id,
         "created_at_epoch": int(time.time()),
-        "active_preset": operator_state.get("active_preset", "Raven Quality Stack"),
         "adult_mode": run_adult_mode,
         "prompt": getattr(getattr(run, "request", None), "prompt", ""),
         "refined_prompt": getattr(getattr(run, "refined_prompt", None), "refined", ""),
         "artifact": artifact,
+        "image_basename": artifact,
+        "creator_controls": creator_controls,
+        "reference_metadata": reference_metadata,
+        "lora_status": {
+            "status": generation.get("lora_status"),
+            "repo_id": generation.get("lora_repo_id"),
+            "message": generation.get("lora_message"),
+        },
         "generation": generation,
-        "st3gg_scan": scan,
-        "st3gg_override_reason": st3gg_override_reason or None,
-        "locateanything_grounding": locate_grounding,
-        "offellia_judge": offellia,
-        "minicpm_judge": operator_state.get("minicpm_judge") or {},
-        "nemotron_evidence": operator_state.get("nemotron_evidence") or {},
-        "modal_video_repair": modal_job,
-        "audio_lore_tts": audio_lore,
-        "tiny_titan_sidecar": tiny_titan,
+        "st3gg_verdict": {
+            "status": st3gg_scan.get("status"),
+            "export_gate": st3gg_scan.get("export_gate"),
+        },
+        "st3gg_override": {
+            "used": bool(override_reason),
+            "reason": override_reason,
+        },
+        "st3gg_scan": st3gg_scan,
+        "minicpm_judge": minicpm_judge,
+        "nemotron_evidence": nemotron_evidence,
         "checkpoint": {
             "status": operator_state.get("checkpoint"),
             "message": operator_state.get("message"),
+            "recommendation": getattr(getattr(run, "checkpoint", None), "recommendation", None),
+            "trust_score": getattr(getattr(run, "checkpoint", None), "trust_score", None),
+            "required_actions": getattr(getattr(run, "checkpoint", None), "required_actions", []),
         },
         "provider_state": operator_state.get("provider_state"),
+        "provider_states": provider_states,
         "model_stack": [
             {
                 "repo_id": model.repo_id,
@@ -142,15 +319,9 @@ def write_export_packet(
             "build_small_32b": budget["status"] == "pass",
             "gradio_space": True,
             "off_brand_custom_ui": True,
-            "openbmb_lane": (operator_state.get("minicpm_judge") or {}).get("status") == "success",
-            "nvidia_nemotron_lane": (operator_state.get("nemotron_evidence") or {}).get("status") == "success",
-            "offellia_quality_lane": offellia.get("status") in {"success", "completed"},
-            "modal_void_lane": modal_job.get("status") in {"success", "completed", "documented"},
-            "tiny_titan_sidecar": tiny_titan.get("status") in {"success", "available", "sidecar"},
-            "raven_quality_stack": True,
-            "locateanything_grounding": bool(locate_grounding.get("targets") or locate_grounding.get("repo_id")),
-            "st3gg_override_recorded": bool(st3gg_override_reason),
-            "st3gg_export_gate": scan.get("export_gate"),
+            "openbmb_lane": minicpm_judge.get("status") == "success",
+            "nvidia_nemotron_lane": nemotron_evidence.get("status") == "success",
+            "st3gg_export_gate": st3gg_scan.get("export_gate"),
         },
     }
     target = export_root() / f"{run_id}.json"

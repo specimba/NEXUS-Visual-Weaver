@@ -15,7 +15,6 @@ from typing import Any
 
 PINNED_LANES = {"image_generation", "grounding", "security"}
 ROTATABLE_LANES = {
-    "tiny_titan_sidecar",
     "private_image_research",
     "prompt_router",
     "taste_judge",
@@ -180,6 +179,14 @@ class WeaverModelRelay:
         public_demo: bool = True,
         strategy: str = "quality_first",
     ) -> LaneDecision:
+        """
+        Selects a helper model for the given lane based on budget, quota, and selection strategy.
+        
+        Returns:
+            LaneDecision: A decision containing the selected primary model (if any), fallback
+                options, the selection strategy used, selection reasoning, expected cost estimate,
+                quota impact details, and information about skipped ineligible candidates.
+        """
         lane = self.normalize_lane(lane)
         strategy = self.normalize_strategy(strategy)
         budget_b = float(budget if budget is not None else (32.0 if lane in PINNED_LANES else DEFAULT_ROTATION_BUDGET_B))
@@ -189,11 +196,12 @@ class WeaverModelRelay:
         lane_records = [record for record in self.records.values() if record.lane == lane]
         if lane in PINNED_LANES:
             primary = next((record for record in lane_records if record.pinned), None)
+            fallbacks = [self.records[model_id] for model_id in (primary.fallback_chain if primary else ()) if model_id in self.records]
             return LaneDecision(
                 lane=lane,
                 strategy="pinned",
                 primary=primary,
-                fallbacks=[],
+                fallbacks=fallbacks,
                 reason="Pinned core lane; rotation disabled for creative identity, grounding, or security.",
                 expected_cost_hint=primary.cost_hint if primary else "unavailable",
                 quota_impact=self._quota_impact(primary, now) if primary else {},
@@ -381,7 +389,7 @@ class WeaverModelRelay:
 
     def _decision_reason(self, primary: ModelRecord, strategy: str, public_demo: bool) -> str:
         if strategy == "license_safe_public":
-            return f"{primary.model_id} selected because it is license-safe and within helper budget."
+            return f"{primary.model_id} selected because it is public-demo safe and within helper budget."
         if strategy == "quota_saver":
             return f"{primary.model_id} selected to preserve provider quota and reuse cheaper metadata paths."
         if strategy == "latency_first":
@@ -430,6 +438,12 @@ class WeaverModelRelay:
 
 
 def default_model_records() -> list[ModelRecord]:
+    """
+    Provides the default registry of helper models across all lanes.
+    
+    Returns:
+    	list[ModelRecord]: A list of preconfigured model records spanning pinned lanes (image_generation, grounding, security) and rotatable lanes (prompt_router, taste_judge, audio_lore_tts, video_repair, hf_catalog_research, modal_job_runner, private_image_research), each with quota limits, performance metrics, and fallback chains.
+    """
     return [
         ModelRecord(
             model_id="flux2-klein-9b-quality",
@@ -438,26 +452,26 @@ def default_model_records() -> list[ModelRecord]:
             repo_id="black-forest-labs/FLUX.2-klein-9B",
             license_gate="review_required",
             params_b=9.0,
-            cost_hint="gated_provider_or_quality_space",
+            cost_hint="gated_provider_or_private_space",
             rpm_limit=6,
             rpd_limit=40,
-            quality_score=0.97,
+            quality_score=0.96,
             latency_ms=26000,
             pinned=True,
+            fallback_chain=("flux2-klein-4b-sidecar",),
         ),
         ModelRecord(
-            model_id="flux2-klein-4b-tiny-sidecar",
-            lane="tiny_titan_sidecar",
+            model_id="flux2-klein-4b-sidecar",
+            lane="image_generation",
             provider="hf",
             repo_id="black-forest-labs/FLUX.2-klein-4B",
             license_gate="apache-2.0",
             params_b=4.0,
-            cost_hint="public_fallback_or_tiny_titan_export",
+            cost_hint="provider_or_local",
             rpm_limit=8,
             rpd_limit=60,
             quality_score=0.92,
             latency_ms=21000,
-            fallback_chain=("flux2-klein-9b-quality",),
         ),
         ModelRecord(
             model_id="flux2-klein-9b-private",
@@ -466,12 +480,24 @@ def default_model_records() -> list[ModelRecord]:
             repo_id="black-forest-labs/FLUX.2-klein-9B",
             license_gate="review_required",
             params_b=9.0,
-            cost_hint="legacy_quality_alias",
+            cost_hint="gated_provider_or_private_space",
             rpm_limit=6,
             rpd_limit=40,
             quality_score=0.96,
             latency_ms=26000,
-            health="excluded",
+        ),
+        ModelRecord(
+            model_id="offellia-gemma4-12b-private-image-judge",
+            lane="private_image_research",
+            provider="local",
+            repo_id="Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
+            license_gate="private_research",
+            params_b=12.0,
+            cost_hint="local_gpu",
+            rpm_limit=20,
+            rpd_limit=200,
+            quality_score=0.95,
+            latency_ms=4200,
         ),
         ModelRecord(
             model_id="locateanything-3b-anchor",
@@ -774,13 +800,13 @@ def default_model_records() -> list[ModelRecord]:
             model_id="netflix-void-modal",
             lane="video_repair",
             provider="modal",
-            repo_id="netflix/void-model",
-            license_gate="apache-2.0",
-            params_b=5.0,
-            cost_hint="modal_credits_40gb_vram",
-            rpm_limit=4,
-            rpd_limit=30,
-            quality_score=0.88,
+            repo_id="Netflix/VOID",
+            license_gate="private_research",
+            params_b=1.3,
+            cost_hint="modal_credits",
+            rpm_limit=10,
+            rpd_limit=120,
+            quality_score=0.84,
             latency_ms=12000,
             fallback_chain=("void-q5-offline",),
         ),
@@ -788,9 +814,9 @@ def default_model_records() -> list[ModelRecord]:
             model_id="void-q5-offline",
             lane="video_repair",
             provider="local",
-            repo_id="local/netflix-void-q5-video-repair",
+            repo_id="local/VOID-Q5-video-repair",
             license_gate="private_research",
-            params_b=5.0,
+            params_b=1.3,
             cost_hint="offline",
             rpm_limit=20,
             rpd_limit=200,

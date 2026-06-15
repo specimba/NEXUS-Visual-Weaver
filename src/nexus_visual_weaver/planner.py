@@ -17,10 +17,34 @@ def build_command_center_run(
     mode: str = "Strict",
     video_preset: str = "Wan2.2 I2V",
     adult_mode: bool = False,
+    creator_controls: dict | None = None,
+    reference_metadata: list[dict] | None = None,
 ) -> GenerationRun:
-    request = CreativeRequest(prompt=prompt, adult_mode=adult_mode)
+    """
+    Assemble a complete generation run by processing a creative prompt through refinement, outfit generation, inspection, and planning stages, then recommend approval or revision via a human checkpoint.
+    
+    Parameters:
+        prompt: The creative prompt to generate from.
+        mode: Operation mode (e.g., "Strict", "Frontier"); determines checkpoint requirements.
+        video_preset: Video generation preset identifier.
+        adult_mode: Whether to enable adult content handling.
+        creator_controls: Optional dictionary of creator-specified controls (e.g., wardrobe preferences).
+        reference_metadata: Optional list of reference metadata dictionaries with id, basename, or url_hash keys.
+    
+    Returns:
+        A GenerationRun containing the refined prompt, generated outfit, inspection results, model stack, adapters, video plan, lore components, and a human checkpoint with approval recommendation based on a computed trust score.
+    """
+    controls = creator_controls or {}
+    references = reference_metadata or []
+    request = CreativeRequest(
+        prompt=prompt,
+        adult_mode=adult_mode,
+        references=[str(item.get("id") or item.get("basename") or item.get("url_hash")) for item in references],
+        creator_controls=controls,
+        reference_metadata=references,
+    )
     refined = refine_prompt(prompt, adult_mode=adult_mode)
-    outfit = build_outfit_graph(refined.refined, adult_mode=adult_mode)
+    outfit = build_outfit_graph(refined.refined, adult_mode=adult_mode, controls=controls.get("wardrobe") if isinstance(controls, dict) else None)
     inspection = inspect_outfit(outfit)
     lore = build_lore_beats(refined.refined)
     video = build_video_plan(video_preset)
@@ -52,4 +76,3 @@ def build_command_center_run(
         video=video,
         checkpoint=checkpoint,
     )
-

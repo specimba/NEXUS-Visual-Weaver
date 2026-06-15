@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 import sys
+import hashlib
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import gradio as gr
 
@@ -49,48 +51,48 @@ MODEL_RELAY = WeaverModelRelay()
 
 def _default_operator_state() -> dict[str, Any]:
     return {
-        "active_preset": "Raven Quality Stack",
         "provider_state": "idle",
         "checkpoint": "pending",
         "export": "pending",
         "message": "No operator action yet.",
-        "modal_video_repair": {
-            "status": "deferred",
-            "repo_id": "netflix/void-model",
-            "provider": "modal",
-            "message": "Offline/Modal VOID repair sample is documented but not a blocking runtime default.",
-        },
-        "offellia_judge": {
-            "status": "deferred_local",
-            "repo_id": "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
-            "message": "Quality/taste judge lane is declared in the Raven stack and runs only when local GGUF runtime is configured.",
-        },
-        "audio_lore_tts": {
-            "status": "optional",
-            "repo_id": "hexgrad/Kokoro-82M",
-            "message": "Lore narration lane is off by default for the public demo.",
-        },
-        "tiny_titan_sidecar": {
-            "status": "available",
-            "repo_id": "black-forest-labs/FLUX.2-klein-4B",
-            "message": "Public-safe 4B sidecar remains selectable without weakening the quality preset.",
-        },
     }
 
 
 def _zero_gpu_entrypoint(fn: Any) -> Any:
-    """Expose one callback to ZeroGPU without making local development depend on Spaces."""
+    """
+    Optionally wrap a function with ZeroGPU acceleration.
+    
+    If the spaces module is available and provides GPU support, wraps the function with `spaces.GPU(duration=300)`. Otherwise, returns the function unchanged.
+    
+    Parameters:
+        fn: The callback function.
+    
+    Returns:
+        The function, optionally wrapped with ZeroGPU acceleration.
+    """
     gpu_decorator = getattr(spaces, "GPU", None) if spaces is not None else None
     if gpu_decorator is None:
         return fn
-    return gpu_decorator(duration=900)(fn)
+    return gpu_decorator(duration=300)(fn)
 
 
 def _relay_snapshot(adult_mode: bool = False) -> dict[str, Any]:
+    """
+    Retrieves the relay dashboard snapshot based on visibility mode.
+    
+    Returns:
+        dict[str, Any]: Dashboard snapshot containing relay status and model information.
+    """
     return MODEL_RELAY.dashboard_snapshot(public_demo=not adult_mode)
 
 
 def _file_path(uploaded: Any) -> str | None:
+    """
+    Extract a file path from various upload input formats.
+    
+    Returns:
+        str | None: The file path string, or None if the input is None or lacks a valid path.
+    """
     if uploaded is None:
         return None
     if isinstance(uploaded, str):
@@ -99,13 +101,174 @@ def _file_path(uploaded: Any) -> str | None:
     return str(path) if path else None
 
 
+def _safe_file_hash(path: str | None) -> tuple[str | None, int | None]:
+    """
+    Compute the SHA-256 hash and size of a file.
+    
+    Returns:
+        tuple[str | None, int | None]: The file's SHA-256 hash as a hex string and size in bytes. Returns (None, None) if the path is falsy or the file cannot be read.
+    """
+    if not path:
+        return None, None
+    try:
+        target = Path(path)
+        sha256 = hashlib.sha256()
+        size = 0
+        with target.open("rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                sha256.update(chunk)
+                size += len(chunk)
+    except OSError:
+        return None, None
+    return sha256.hexdigest(), size
+
+
+def _safe_reference_url_metadata(reference_url: str | None) -> dict[str, Any] | None:
+    """
+    Validates a reference URL and extracts its metadata.
+    
+    Returns:
+        A dict with status "metadata_only" containing domain (lowercased) and URL hash if valid;
+        a dict with status "invalid_url" if the URL scheme is not HTTP(S) or domain is missing;
+        None if reference_url is falsy.
+    """
+    if not reference_url:
+        return None
+    parsed = urlparse(reference_url.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return {"source": "url", "status": "invalid_url", "message": "Reference URL must be http(s)."}
+    url_hash = hashlib.sha256(reference_url.strip().encode("utf-8")).hexdigest()
+    return {
+        "source": "url",
+        "status": "metadata_only",
+        "domain": parsed.netloc.lower(),
+        "url_hash": url_hash,
+        "message": "URL stored as metadata only; Space runtime does not crawl or copy shop images.",
+    }
+
+
+def _reference_metadata(uploaded: Any, reference_url: str | None, scan: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Builds a list of metadata records from an uploaded file and/or reference URL.
+    
+    For an uploaded file, includes basename, SHA-256 hash, size, and scan results (status,
+    export gate, magic, extension). For a reference URL, includes domain, URL hash, and status.
+    
+    Parameters:
+    	uploaded: An uploaded file object, path string, or None.
+    	reference_url: Optional reference URL string.
+    	scan: Dictionary of ST3GG scan results for the uploaded file.
+    
+    Returns:
+    	List of metadata dictionaries for the file and/or URL. Empty if neither is provided.
+    """
+    records: list[dict[str, Any]] = []
+    path = _file_path(uploaded)
+    if path:
+        file_hash, size = _safe_file_hash(path)
+        records.append(
+            {
+                "source": "upload",
+                "basename": Path(path).name,
+                "sha256": file_hash,
+                "size_bytes": size,
+                "st3gg_status": scan.get("status"),
+                "export_gate": scan.get("export_gate"),
+                "magic": scan.get("magic"),
+                "extension": scan.get("extension"),
+            }
+        )
+    url_record = _safe_reference_url_metadata(reference_url)
+    if url_record:
+        records.append(url_record)
+    return records
+
+
+def _creator_controls(
+    reasoning_mode: str,
+    video_preset: str,
+    silhouette: str | None = None,
+    outerwear: str | None = None,
+    upper_body: str | None = None,
+    footwear: str | None = None,
+    palette: str | None = None,
+    hardware: str | None = None,
+    locate_focus: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Create a control object combining wardrobe selections with generation policy and reasoning configuration.
+    
+    Returns:
+        dict: Nested structure containing reasoning mode, video preset, wardrobe selections with locked slots,
+              and FLUX generation configuration.
+    """
+    wardrobe = {
+        "silhouette": silhouette or "structured long coat",
+        "outerwear": outerwear or "black patent leather long coat",
+        "upper_body": upper_body or "Chantilly lace neckline",
+        "footwear": footwear or "platform boots",
+        "palette": palette or "black, crimson, cyan neon",
+        "hardware": hardware or "crimson hardware",
+        "locked_slots": ["outerwear", "upper_body", "footwear", "jewelry"],
+        "locate_focus": locate_focus or ["outerwear", "footwear", "jewelry"],
+    }
+    return {
+        "reasoning_mode": reasoning_mode,
+        "video_preset": video_preset,
+        "wardrobe": wardrobe,
+        "generation": {
+            "flux_primary": "black-forest-labs/FLUX.2-klein-9B",
+            "flux_sidecar": "black-forest-labs/FLUX.2-klein-4B",
+            "lora_policy": "attempt compatible runtime adapter; report loaded/skipped/failed",
+        },
+    }
+
+
+def _prompt_with_controls(prompt: str, controls: dict[str, Any]) -> str:
+    """
+    Augments a prompt with wardrobe control parameters.
+    
+    If any wardrobe fields are specified in the controls, appends them to the
+    prompt with a "Wardrobe controls:" prefix. Otherwise returns the prompt unchanged.
+    
+    Parameters:
+    	controls (dict[str, Any]): A controls dictionary containing a "wardrobe" key with fields for silhouette, outerwear, upper_body, footwear, palette, and hardware.
+    
+    Returns:
+    	str: The prompt with wardrobe controls appended, or the original prompt if no wardrobe items are specified.
+    """
+    wardrobe = controls.get("wardrobe", {})
+    additions = [
+        wardrobe.get("silhouette"),
+        wardrobe.get("outerwear"),
+        wardrobe.get("upper_body"),
+        wardrobe.get("footwear"),
+        wardrobe.get("palette"),
+        wardrobe.get("hardware"),
+    ]
+    suffix = ", ".join(str(item) for item in additions if item)
+    return f"{prompt}\nWardrobe controls: {suffix}" if suffix else prompt
+
+
 def _generated_output_path(operator_state: dict[str, Any] | None) -> str | None:
+    """
+    Extract the generated artifact output path from the operator state.
+    
+    Returns:
+        The output path string if a generated artifact exists, None otherwise.
+    """
     generation = (operator_state or {}).get("generation") or {}
     output_path = generation.get("output_path")
     return str(output_path) if output_path else None
 
 
 def _authoritative_generated_scan(operator_state: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    Obtain the current scan for a generated artifact.
+    
+    Returns:
+    	dict[str, Any]: A scan record sourced from the generated output file, stored state, or a default scan.
+    """
     output_path = _generated_output_path(operator_state)
     if output_path:
         return scan_file(output_path)
@@ -114,6 +277,15 @@ def _authoritative_generated_scan(operator_state: dict[str, Any] | None) -> dict
 
 
 def _checkpoint_seed(checkpoint_id: str) -> int:
+    """
+    Derives a numeric seed from a checkpoint ID.
+    
+    Parameters:
+        checkpoint_id (str): A checkpoint identifier string.
+    
+    Returns:
+        int: An integer seed bounded to less than 1,000,000, or 0 if no valid seed data can be extracted from the checkpoint ID.
+    """
     suffix = "".join(char for char in checkpoint_id[-8:] if char in "0123456789abcdefABCDEF")
     if not suffix:
         return 0
@@ -124,6 +296,12 @@ def _checkpoint_seed(checkpoint_id: str) -> int:
 
 
 def _wardrobe_summary(run: Any) -> str:
+    """
+    Formats outfit wardrobe slots into a semicolon-separated summary string.
+    
+    Returns:
+        A semicolon-separated string listing each outfit slot's name, description, material, palette, and locked status.
+    """
     slots = getattr(getattr(run, "outfit", None), "slots", []) or []
     return "; ".join(
         f"{slot.name}: {slot.description}, material={slot.material}, palette={slot.palette}, locked={slot.locked}"
@@ -159,16 +337,49 @@ def run_weave(
     adult_mode: bool,
     upload: Any,
     active_section: str,
+    silhouette: str | None = None,
+    outerwear: str | None = None,
+    upper_body: str | None = None,
+    footwear: str | None = None,
+    palette: str | None = None,
+    hardware: str | None = None,
+    reference_url: str | None = None,
 ) -> tuple[Any, ...]:
+    """
+    Execute the complete weaving workflow from prompt through image generation and evaluation.
+    
+    Assembles wardrobe controls, generates an image via FLUX, scans and judges the output through ST3GG scanning and dual judges (Minicpm and Nemotron), and compiles operator state reflecting generation status, checkpoint readiness, and export gating.
+    
+    Returns:
+        Tuple containing dashboard region HTML fragments (topbar, command_rail, workflow, operations, inspector, drawer, status, artifacts, providers), catalog HTML, run data, catalog summary, scan results, operator state with generation details and judge evidence, and button state updates.
+    """
     prompt = prompt.strip() or DEFAULT_PROMPT
+    controls = _creator_controls(
+        reasoning_mode=reasoning_mode,
+        video_preset=video_preset,
+        silhouette=silhouette,
+        outerwear=outerwear,
+        upper_body=upper_body,
+        footwear=footwear,
+        palette=palette,
+        hardware=hardware,
+    )
+    controlled_prompt = _prompt_with_controls(prompt, controls)
+    reference_scan = scan_file(_file_path(upload))
+    reference_metadata = _reference_metadata(upload, reference_url, reference_scan)
     run = build_command_center_run(
-        prompt=prompt,
+        prompt=controlled_prompt,
         mode=reasoning_mode,
         video_preset=video_preset,
         adult_mode=adult_mode,
+        creator_controls=controls,
+        reference_metadata=reference_metadata,
     )
-    reference_scan = scan_file(_file_path(upload))
-    generation = generate_flux_image(run.refined_prompt.refined, seed=_checkpoint_seed(run.checkpoint.checkpoint_id))
+    generation = generate_flux_image(
+        run.refined_prompt.refined,
+        seed=_checkpoint_seed(run.checkpoint.checkpoint_id),
+        adult_mode=adult_mode,
+    )
     generated_scan = scan_file(generation.output_path) if generation.output_path else scan_file(None)
     minicpm = judge_with_minicpm(
         prompt=run.refined_prompt.refined,
@@ -185,31 +396,17 @@ def run_weave(
     if generation.status == "success":
         provider_state = "generated"
     operator_state = {
-        **_default_operator_state(),
-        "active_preset": "Raven Quality Stack",
         "provider_state": provider_state,
         "checkpoint": "pending_review",
         "export": generated_scan.get("export_gate", "pending"),
         "message": generation.message or "Run packet generated. Human checkpoint required before provider promotion or export.",
         "generation": generation.to_dict(),
+        "creator_controls": controls,
+        "reference_metadata": reference_metadata,
         "reference_scan": reference_scan,
         "generated_scan": generated_scan,
         "minicpm_judge": minicpm.to_dict(),
         "nemotron_evidence": nemotron.to_dict(),
-        "locateanything_grounding": {
-            "status": run.inspection.status,
-            "repo_id": run.inspection.locate_model,
-            "targets": [
-                {
-                    "slot_name": target.slot_name,
-                    "query": target.query,
-                    "expected_region": target.expected_region,
-                    "confidence": target.confidence,
-                }
-                for target in run.inspection.targets[:6]
-            ],
-            "drift_flags": run.inspection.drift_flags,
-        },
     }
     regions = _dashboard_regions(
         run=run,
@@ -245,6 +442,14 @@ def toggle_adult_visibility(
     active_section: str,
     upload: Any,
 ) -> tuple[Any, ...]:
+    """
+    Update the dashboard to reflect a change in adult content visibility.
+    
+    Re-scans any uploaded file and regenerates all dashboard regions to show or hide adult content while maintaining ST3GG, consent, and export gates.
+    
+    Returns:
+    	tuple: Updated UI fragments and state (topbar, command rail, operations, inspector, artifacts, providers, catalog table, catalog summary, scan metadata, operator state).
+    """
     scan = scan_file(_file_path(upload))
     operator_state = {
         **_default_operator_state(),
@@ -273,10 +478,12 @@ def refresh_section(
     operator_state: dict[str, Any] | None,
 ) -> tuple[str, str, str, str, str, dict[str, Any]]:
     """
-    Updates dashboard regions for the selected navigation section.
-
+    Render dashboard regions for the currently selected navigation section.
+    
     Returns:
-        A tuple containing HTML strings for command_rail, operations, inspector, artifacts, and providers regions, followed by the security scan results.
+        A tuple of (command_rail, operations, inspector, artifacts, providers, scan),
+        where the first five elements are HTML strings for dashboard regions and the last
+        is the ST3GG scan results dictionary.
     """
     scan = scan or scan_file(None)
     regions = _dashboard_regions(
@@ -296,6 +503,25 @@ def _render_stateful(
     active_section: str,
     operator_state: dict[str, Any],
 ) -> tuple[Any, ...]:
+    """
+    Render the dashboard with current state and return all UI outputs and state objects.
+    
+    Ensures scan data exists, calls the dashboard region renderer with current state, and assembles
+    a comprehensive tuple of HTML fragments, state objects, and button updates for Gradio output.
+    
+    Parameters:
+    	run: The current run object, or None if no run is active.
+    	adult_mode: Whether adult-mode visibility is enabled.
+    	scan: Scan/ST3GG evidence dict. If None or falsy, defaults to empty scan from scan_file.
+    	active_section: The currently active dashboard section identifier.
+    	operator_state: Current operator state dict containing provider status, checkpoint, export, and messaging.
+    
+    Returns:
+    	A tuple containing: topbar, command_rail, workflow, operations, inspector, drawer, status,
+    	artifacts, providers (all HTML fragments), catalog table HTML, run dict (or empty dict),
+    	catalog summary, scan dict, operator_state dict, and a Gradio update object for the stop
+    	button (interactive if run exists and provider is neither idle, stopped, nor exported).
+    """
     scan = scan or scan_file(None)
     regions = _dashboard_regions(
         run=run,
@@ -329,10 +555,22 @@ def scan_reference(
     upload: Any,
     active_section: str,
     operator_state: dict[str, Any] | None,
+    reference_url: str | None = None,
 ) -> tuple[Any, ...]:
+    """
+    Scan and evaluate a reference image or URL, updating the operator state with findings.
+    
+    Parameters:
+        reference_url (str | None): Optional URL for reference metadata validation.
+            Only domain and URL hash are recorded; no content crawling or copying occurs.
+    
+    Returns:
+        Rendered dashboard outputs and the computed generated scan.
+    """
     state = operator_state or _default_operator_state()
     reference_path = _file_path(upload)
     reference_scan = scan_file(reference_path)
+    reference_metadata = _reference_metadata(upload, reference_url, reference_scan)
     generated_scan = _authoritative_generated_scan(state)
     minicpm = None
     if run is not None and reference_path:
@@ -342,27 +580,10 @@ def scan_reference(
             scan=reference_scan,
             wardrobe_summary=_wardrobe_summary(run),
         )
-    locate_plan = {}
-    if run is not None:
-        locate_plan = {
-            "status": run.inspection.status,
-            "repo_id": run.inspection.locate_model,
-            "source": "reference_scan",
-            "targets": [
-                {
-                    "slot_name": target.slot_name,
-                    "query": target.query,
-                    "expected_region": target.expected_region,
-                    "confidence": target.confidence,
-                }
-                for target in run.inspection.targets[:6]
-            ],
-            "drift_flags": run.inspection.drift_flags,
-        }
     next_state = {
         **state,
         **({"reference_judge": minicpm.to_dict()} if minicpm else {}),
-        **({"reference_locate_plan": locate_plan, "locateanything_grounding": locate_plan} if locate_plan else {}),
+        "reference_metadata": reference_metadata,
         "reference_scan": reference_scan,
         "reference_export_gate": reference_scan.get("export_gate", "pending"),
         "export": state.get("export", generated_scan.get("export_gate", "pending")),
@@ -383,6 +604,12 @@ def approve_checkpoint(
     active_section: str,
     operator_state: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
+    """
+    Approves the checkpoint if a run and generated artifact exist, blocking approval otherwise. Sets provider readiness based on the ST3GG export gate status.
+    
+    Returns:
+    	tuple[Any, ...]: Updated dashboard and operator state reflecting the checkpoint decision.
+    """
     state = operator_state or _default_operator_state()
     scan = _authoritative_generated_scan(state)
     if run is None:
@@ -413,8 +640,28 @@ def export_packet(
     scan: dict[str, Any] | None,
     active_section: str,
     operator_state: dict[str, Any] | None,
-    override_reason: str = "",
+    override_reason: str | None = None,
 ) -> tuple[Any, ...]:
+    """
+    Prepare an export packet for the generated artifact with precondition validation and ST3GG gating.
+    
+    Validates that a run, approved checkpoint, and generated artifact exist, and checks the
+    ST3GG export gate status. Blocks export if any precondition fails or if the gate is not
+    clear (unless an explicit override reason is provided). Writes a governed export packet
+    when the gate is clear, or an audit-marked packet when overridden.
+    
+    Parameters:
+        run: Active run packet; export is blocked if None.
+        adult_mode: Whether adult content is enabled for the export.
+        scan: ST3GG scan results; checked for export gate status.
+        active_section: Current UI section for rendering.
+        operator_state: Current operator state; defaults to idle state if None.
+        override_reason: Reason to override when ST3GG gate is not clear.
+    
+    Returns:
+        Tuple containing dashboard region HTML, run dict, catalog outputs, scan, operator state,
+        and stop button interactive state.
+    """
     state = operator_state or _default_operator_state()
     scan = _authoritative_generated_scan(state)
     override_reason = (override_reason or "").strip()
@@ -425,24 +672,21 @@ def export_packet(
     elif not _generated_output_path(state):
         next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export blocked: no generated artifact exists."}
     elif scan.get("export_gate") != "clear" and not override_reason:
-        next_state = {**state, "provider_state": "blocked", "export": scan.get("export_gate", "blocked"), "message": "Export blocked: ST3GG gate is not clear. Add an explicit override reason to prepare a reviewed evidence packet."}
+        next_state = {**state, "provider_state": "blocked", "export": scan.get("export_gate", "blocked"), "message": "Export blocked: ST3GG gate is not clear. Add an explicit override reason to write an audit packet."}
     else:
         export_state = "clear" if scan.get("export_gate") == "clear" else "override"
-        export_input_state = {
+        export_operator_state = {
             **state,
-            **({"st3gg_override_reason": override_reason} if override_reason and scan.get("export_gate") != "clear" else {}),
+            **({"st3gg_override_reason": override_reason} if override_reason else {}),
+            "export": export_state,
         }
-        export = write_export_packet(run=run, scan=scan, operator_state=export_input_state, adult_mode=adult_mode)
+        export = write_export_packet(run=run, scan=scan, operator_state=export_operator_state, adult_mode=adult_mode)
         next_state = {
-            **export_input_state,
+            **export_operator_state,
             "provider_state": "exported",
             "export": export_state,
             "export_packet": {"path": export["path"]},
-            "message": (
-                f"Governed export packet prepared with ST3GG override recorded: {export['path']}"
-                if export_state == "override"
-                else f"Governed export packet prepared: {export['path']}"
-            ),
+            "message": f"Governed export packet prepared: {export['path']}" if export_state == "clear" else f"ST3GG override audit packet prepared: {export['path']}",
         }
     return _render_stateful(run, adult_mode, scan, active_section, next_state)
 
@@ -454,6 +698,15 @@ def stop_provider_job(
     active_section: str,
     operator_state: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
+    """
+    Stop the active provider job.
+    
+    Halts the current image generation or provider handoff, preserving local evidence and 
+    the dry-run packet. Re-renders the dashboard with provider state set to stopped.
+    
+    Returns:
+        tuple[Any, ...]: Dashboard region HTML fragments, run dict, scan dict, operator state, and UI control updates.
+    """
     scan = scan or scan_file(None)
     next_state = {
         **(operator_state or _default_operator_state()),
@@ -467,6 +720,12 @@ def reset_demo(
     adult_mode: bool,
     active_section: str,
 ) -> tuple[Any, ...]:
+    """
+    Reset the application to its initial state by clearing all generated evidence and reinitializing operator state.
+    
+    Returns:
+    	tuple[Any, ...]: Dashboard region HTML fragments, catalog table, empty run state, catalog summary, scan state, operator state, and button state for a reset application.
+    """
     scan = scan_file(None)
     operator_state = _default_operator_state()
     regions = _dashboard_regions(adult_mode=adult_mode, scan=scan, active_section=active_section, operator_state=operator_state)
@@ -522,6 +781,43 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
                     label="Video Path Preset",
                 )
         with gr.Row():
+            silhouette = gr.Dropdown(
+                ["structured long coat", "fitted gothic bodice", "layered tactical silhouette"],
+                value="structured long coat",
+                label="Silhouette",
+            )
+            outerwear = gr.Dropdown(
+                ["black patent leather long coat", "faux fur collar coat", "tailored rain slicker"],
+                value="black patent leather long coat",
+                label="Outerwear",
+            )
+            upper_body = gr.Dropdown(
+                ["Chantilly lace neckline", "black mesh layer", "structured corset bodice"],
+                value="Chantilly lace neckline",
+                label="Upper Body",
+            )
+            footwear = gr.Dropdown(
+                ["platform boots", "patent leather heels", "armored couture boots"],
+                value="platform boots",
+                label="Footwear",
+            )
+        with gr.Row():
+            palette = gr.Dropdown(
+                ["black, crimson, cyan neon", "obsidian, pearl, crimson", "graphite, magenta, cold blue"],
+                value="black, crimson, cyan neon",
+                label="Palette",
+            )
+            hardware = gr.Dropdown(
+                ["crimson hardware", "silver occult buckles", "holographic NEXUS sigils"],
+                value="crimson hardware",
+                label="Hardware",
+            )
+            reference_url = gr.Textbox(
+                label="Reference URL (metadata only)",
+                placeholder="https://shop.example/reference-garment",
+                scale=2,
+            )
+        with gr.Row():
             upload = gr.File(
                 label="Reference / Output For ST3GG Scan",
                 file_count="single",
@@ -536,18 +832,17 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
             )
             run_btn = gr.Button("Run Active Weave", variant="primary", scale=1)
             stop_btn = gr.Button("Stop Provider Job", variant="stop", interactive=False, scale=1)
-        override_reason = gr.Textbox(
-            value="",
-            label="ST3GG Override Reason",
-            placeholder="Required only to export a reviewed/blocked artifact. Explain why the evidence packet may be written.",
-            lines=2,
-            max_lines=3,
-        )
         with gr.Row(elem_id="nw-operator-actions", elem_classes=["nw-operator-actions"]):
             scan_btn = gr.Button("Scan Reference", scale=1)
             checkpoint_btn = gr.Button("Approve Checkpoint", scale=1)
             export_btn = gr.Button("Prepare Export Packet", scale=1)
             reset_btn = gr.Button("Reset Demo State", scale=1)
+        override_reason = gr.Textbox(
+            label="ST3GG Override Reason",
+            placeholder="Required only when exporting an audit packet for a reviewed/blocked artifact.",
+            lines=2,
+            max_lines=3,
+        )
 
     with gr.Row(elem_id="nw-workspace", elem_classes=["nw-workspace"]):
         with gr.Column(scale=1, min_width=150, elem_id="nw-native-rail"):
@@ -596,17 +891,21 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
 
     operator_outputs = dashboard_outputs + [operator_state, stop_btn]
 
-    run_btn.click(
+    run_click = run_btn.click(
         fn=run_weave,
-        inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav],
+        inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav, silhouette, outerwear, upper_body, footwear, palette, hardware, reference_url],
         outputs=stateful_outputs,
         api_name="run_active_weave",
+        concurrency_limit=1,
+        concurrency_id="flux-gpu",
     )
-    prompt.submit(
+    run_submit = prompt.submit(
         fn=run_weave,
-        inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav],
+        inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav, silhouette, outerwear, upper_body, footwear, palette, hardware, reference_url],
         outputs=stateful_outputs,
         api_name=False,
+        concurrency_limit=1,
+        concurrency_id="flux-gpu",
     )
     adult_mode.change(
         fn=toggle_adult_visibility,
@@ -624,42 +923,51 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
             operator_state,
         ],
         api_name="toggle_adult_catalog",
+        queue=False,
     )
     section_nav.change(
         fn=refresh_section,
         inputs=[section_nav, adult_mode, active_run_state, scan_state, operator_state],
         outputs=[command_rail_html, operations_html, inspector_html, artifact_html, provider_html, scan_json],
         api_name=False,
+        queue=False,
     )
     scan_btn.click(
         fn=scan_reference,
-        inputs=[active_run_state, adult_mode, upload, section_nav, operator_state],
+        inputs=[active_run_state, adult_mode, upload, section_nav, operator_state, reference_url],
         outputs=dashboard_outputs + [operator_state, stop_btn, scan_state],
         api_name="scan_reference",
+        queue=False,
     )
     checkpoint_btn.click(
         fn=approve_checkpoint,
         inputs=[active_run_state, adult_mode, scan_state, section_nav, operator_state],
         outputs=operator_outputs,
         api_name="approve_checkpoint",
+        queue=False,
     )
     export_btn.click(
         fn=export_packet,
         inputs=[active_run_state, adult_mode, scan_state, section_nav, operator_state, override_reason],
         outputs=operator_outputs,
         api_name="prepare_export_packet",
+        queue=False,
     )
     stop_btn.click(
         fn=stop_provider_job,
         inputs=[active_run_state, adult_mode, scan_state, section_nav, operator_state],
         outputs=operator_outputs,
         api_name="stop_provider_job",
+        queue=False,
+        cancels=[run_click, run_submit],
     )
     reset_btn.click(
         fn=reset_demo,
         inputs=[adult_mode, section_nav],
         outputs=stateful_outputs,
         api_name="reset_demo_state",
+        queue=False,
+        cancels=[run_click, run_submit],
     )
     demo.load(
         fn=lambda: (render_catalog_table(False), catalog_summary(False), scan_file(None), scan_file(None), _default_operator_state()),

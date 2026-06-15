@@ -12,14 +12,9 @@ short_description: Governed gothic couture visual creation command center
 models:
   - black-forest-labs/FLUX.2-klein-9B
   - black-forest-labs/FLUX.2-klein-4B
-  - Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf
   - nvidia/LocateAnything-3B
   - openbmb/MiniCPM-V-4.6
   - nvidia/NVIDIA-Nemotron-Parse-v1.2
-  - openbmb/MiniCPM5-1B
-  - onnx-community/functiongemma-270m-it-ONNX
-  - hexgrad/Kokoro-82M
-  - netflix/void-model
 tags:
   - gradio
   - mcp-server
@@ -30,8 +25,6 @@ tags:
   - best-agent
   - best-demo
   - openbmb
-  - nvidia
-  - modal
   - codex
 ---
 
@@ -57,17 +50,14 @@ The interface is built around a command-center surface:
 
 Pinned lanes do not rotate:
 
-- `image_generation`: Raven Quality Stack with `black-forest-labs/FLUX.2-klein-9B` as the flagship image/edit lane
+- `image_generation`: Raven Quality FLUX.2 Klein 9B image lane, with FLUX.2 Klein 4B as Tiny Titan sidecar/fallback
 - `grounding`: NVIDIA LocateAnything-3B grounding anchor
 - `security`: ST3GG defensive scanner/export gate
 
 Sponsor/evidence lanes are optional but first-class when secrets are configured:
 
-- `Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf` (11.91B): quality/taste/lore critique lane for private or configured judge use.
 - `openbmb/MiniCPM-V-4.6` (1.30B): visual judge for wardrobe, footwear, material drift, lore continuity, and export notes.
 - `nvidia/NVIDIA-Nemotron-Parse-v1.2` (0.94B): structured evidence/parser lane for NVIDIA/Nemotron claim support.
-- `hexgrad/Kokoro-82M` (0.082B): optional lore narration lane.
-- `netflix/void-model` (5B CogVideoX-based): Modal/offline video repair sample lane, not a blocking Space runtime default.
 
 Helper lanes may rotate with quota, license, health, and parameter-budget checks:
 
@@ -78,12 +68,12 @@ Helper lanes may rotate with quota, license, health, and parameter-budget checks
 - HF catalog research
 - Modal job runner
 
-The default preset is **Raven Quality Stack**. `black-forest-labs/FLUX.2-klein-4B` remains available only as a Tiny Titan/public-safe sidecar and fallback if the gated 9B lane is unavailable. OFFELLIA heretic/obliterated-style variants stay private research only and never disable consent, provenance, ST3GG, export, or dataset-partition gates.
+Public demo mode uses the Raven Quality FLUX.2 Klein 9B lane when Space access is configured, while preserving the 4B sidecar for fallback/Tiny Titan evidence. Private research mode can add OFFELLIA/Gemma routes, but it never disables consent, provenance, ST3GG, export, or dataset-partition gates.
 
 ## Current Features
 
 - Gradio Blocks dashboard with split update regions.
-- Real FLUX.2 Klein 9B-first image generation on Hugging Face ZeroGPU when runtime access is configured, with an honest 4B sidecar fallback.
+- Real FLUX.2 Klein 9B-first image generation on Hugging Face ZeroGPU when runtime access is configured, with honest 4B sidecar fallback.
 - Above-fold ST3GG trust strip with safe-vs-blocked fixture evidence.
 - Generated artifact ST3GG scan and checkpoint/export state.
 - Optional MiniCPM-V and Nemotron provider evidence lanes with explicit configured/missing-secret status.
@@ -100,18 +90,25 @@ The default preset is **Raven Quality Stack**. `black-forest-labs/FLUX.2-klein-4
 | Target | Evidence status |
 | --- | --- |
 | Gradio Space | App runs as a public Hugging Face Gradio Space with `mcp_server=True`. |
-| <=32B models | Raven Quality Stack is 28.50B: FLUX.2 Klein 9B + OFFELLIA Q4 Gemma 12B + LocateAnything 3.83B + MiniCPM-V 1.30B + Nemotron Parse 0.94B + MiniCPM5 1.08B + FunctionGemma 0.27B + Kokoro 0.082B. |
+| <=32B models | Raven Quality stack is 16.42B: FLUX.2 Klein 9B + LocateAnything 3.83B + MiniCPM-V 1.30B + Nemotron Parse 0.94B + MiniCPM5 1.08B + FunctionGemma 0.27B. |
 | Off Brand | Custom command-center UI, dense inspector, workflow graph, wardrobe/lore drawer, and provider cards. |
 | Best Agent | Multi-step prompt, generation, scan, judge, checkpoint, export workflow. |
 | OpenBMB | Claimed only when MiniCPM-V returns success status in an export packet. |
 | NVIDIA | Claimed only when Nemotron returns success status in an export packet. LocateAnything remains visible but is not the Nemotron claim by itself. |
-| Modal | Sidecar-only until a real Modal job is documented; target lane is `netflix/void-model` video repair. |
 | OpenAI Codex | Development branch and PR include Codex-authored implementation commits. |
 | Demo / social | Add final links here before submission: `DEMO_VIDEO_URL` and `SOCIAL_POST_URL`. |
 
-Tiny Titan is not the flagship story. It can be claimed only from a successful sidecar export packet where every active sidecar model is <=4B.
+Tiny Titan can be claimed only from a successful sidecar export packet using the 4B mode. It must not weaken the main Raven Quality stack.
 
-See [docs/SUBMISSION_ASSETS.md](docs/SUBMISSION_ASSETS.md) for the demo script, social post draft, thumbnail direction, and final link checklist.
+## Merit Badges
+
+| Badge | Bonus Quest | Status | Evidence |
+| --- | --- | --- | --- |
+| `off-brand` | Off-Brand | Ready | Gothic couture command-center UI with workflow graph, inspector, wardrobe/lore drawer, and ST3GG trust strip. |
+| `best-agent` | Best Agent | Ready when export packet exists | Multi-step weave: prompt refinement, generation, scan, optional judges, checkpoint, and governed export. |
+| `best-demo` | Best Demo | Pending final asset | Requires final demo video link and social post link before submission. |
+| `openbmb` | OpenBMB sponsor | Conditional | Claimed only when MiniCPM-V returns `success` in an export packet. |
+| `nvidia` | NVIDIA/Nemotron sponsor | Conditional | Claimed only when Nemotron returns `success`; LocateAnything remains grounding evidence, not a Nemotron claim. |
 
 ## Local Setup
 

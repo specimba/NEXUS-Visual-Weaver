@@ -10,7 +10,7 @@ MODEL_CATALOG: list[ModelCandidate] = [
         role="tiny_titan_sidecar_image_generator",
         task="image-to-image",
         params_b=4.0,
-        runtime="diffusers / public fallback",
+        runtime="diffusers / provider",
         license="apache-2.0",
         source_url="https://hf.co/black-forest-labs/FLUX.2-klein-4B",
     ),
@@ -19,18 +19,19 @@ MODEL_CATALOG: list[ModelCandidate] = [
         role="quality_image_generator",
         task="image-to-image",
         params_b=9.0,
-        runtime="diffusers / gated quality lane",
+        runtime="diffusers / gated provider",
         license="other",
         gated=True,
         source_url="https://hf.co/black-forest-labs/FLUX.2-klein-9B",
     ),
     ModelCandidate(
         repo_id="Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
-        role="quality_multimodal_judge",
+        role="private_research_multimodal_judge",
         task="image-text-to-text",
         params_b=12.0,
         runtime="llama.cpp GGUF",
         license="apache-2.0",
+        public_demo=False,
         source_url="https://hf.co/Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
     ),
     ModelCandidate(
@@ -80,41 +81,13 @@ MODEL_CATALOG: list[ModelCandidate] = [
     ),
     ModelCandidate(
         repo_id="Brunobkr/OFFELLIA_IQ4_XS_gemma-4-12B-it-heretic",
-        role="adult_private_research_text_judge",
+        role="adult_mode_text_judge",
         task="text-generation",
         params_b=12.0,
         runtime="llama.cpp GGUF",
         license="other",
         adult_only=True,
         source_url="https://hf.co/Brunobkr/OFFELLIA_IQ4_XS_gemma-4-12B-it-heretic",
-    ),
-    ModelCandidate(
-        repo_id="hexgrad/Kokoro-82M",
-        role="audio_lore_tts",
-        task="text-to-speech",
-        params_b=0.082,
-        runtime="local / provider",
-        license="apache-2.0",
-        source_url="https://hf.co/hexgrad/Kokoro-82M",
-    ),
-    ModelCandidate(
-        repo_id="ResembleAI/chatterbox",
-        role="audio_lore_tts_optional",
-        task="text-to-speech",
-        params_b=0.5,
-        runtime="provider / Modal",
-        license="mit",
-        source_url="https://hf.co/ResembleAI/chatterbox",
-    ),
-    ModelCandidate(
-        repo_id="netflix/void-model",
-        role="modal_video_repair",
-        task="video-to-video",
-        params_b=5.0,
-        runtime="Modal / 40GB+ VRAM",
-        license="apache-2.0",
-        public_demo=False,
-        source_url="https://hf.co/netflix/void-model",
     ),
     ModelCandidate(
         repo_id="Wan-AI/Wan2.2-I2V-A14B-Diffusers",
@@ -139,27 +112,43 @@ MODEL_CATALOG: list[ModelCandidate] = [
 ADAPTER_CATALOG: list[AdapterRecipe] = [
     AdapterRecipe(
         repo_id="DeverStyle/Flux.2-Klein-Loras",
-        adapter_for="black-forest-labs/FLUX.2-klein-4B",
+        adapter_for="black-forest-labs/FLUX.2-klein-9B",
         task="text-to-image style stack",
         license="apache-2.0",
+        trigger_words=["gothic couture", "structured garment"],
+        compatible_repo_ids=[
+            "black-forest-labs/FLUX.2-klein-9B",
+            "black-forest-labs/FLUX.2-klein-4B",
+        ],
     ),
     AdapterRecipe(
         repo_id="fal/flux-2-klein-4B-outpaint-lora",
         adapter_for="black-forest-labs/FLUX.2-klein-4B",
         task="outpaint/inpaint public demo helper",
         license="apache-2.0",
+        compatible_repo_ids=["black-forest-labs/FLUX.2-klein-4B"],
+        requires_image=True,
     ),
     AdapterRecipe(
         repo_id="thedeoxen/refcontrol-FLUX.2-klein-4B-reference-depth-lora",
         adapter_for="black-forest-labs/FLUX.2-klein-base-4B",
         task="reference-depth control for garment layout",
         license="apache-2.0",
+        compatible_repo_ids=[
+            "black-forest-labs/FLUX.2-klein-base-4B",
+            "black-forest-labs/FLUX.2-klein-4B",
+        ],
+        requires_image=True,
     ),
     AdapterRecipe(
         repo_id="nomadoor/flux-2-klein-9B-schematic-lora",
         adapter_for="black-forest-labs/FLUX.2-klein-base-9B",
         task="pose/depth/segmentation schematic control",
         license="other",
+        compatible_repo_ids=[
+            "black-forest-labs/FLUX.2-klein-base-9B",
+            "black-forest-labs/FLUX.2-klein-9B",
+        ],
     ),
     AdapterRecipe(
         repo_id="fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA",
@@ -195,32 +184,35 @@ ADAPTER_CATALOG: list[AdapterRecipe] = [
     ),
 ]
 
-RAVEN_QUALITY_STACK = [
+DEFAULT_ACTIVE_STACK = [
+    "black-forest-labs/FLUX.2-klein-9B",
+    "nvidia/LocateAnything-3B",
+    "openbmb/MiniCPM-V-4.6",
+    "nvidia/NVIDIA-Nemotron-Parse-v1.2",
+    "openbmb/MiniCPM5-1B",
+    "onnx-community/functiongemma-270m-it-ONNX",
+]
+
+PRIVATE_RESEARCH_STACK = [
     "black-forest-labs/FLUX.2-klein-9B",
     "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf",
     "nvidia/LocateAnything-3B",
     "openbmb/MiniCPM-V-4.6",
     "nvidia/NVIDIA-Nemotron-Parse-v1.2",
     "openbmb/MiniCPM5-1B",
-    "onnx-community/functiongemma-270m-it-ONNX",
-    "hexgrad/Kokoro-82M",
 ]
-
-TINY_TITAN_STACK = [
-    "black-forest-labs/FLUX.2-klein-4B",
-    "nvidia/LocateAnything-3B",
-    "openbmb/MiniCPM-V-4.6",
-    "nvidia/NVIDIA-Nemotron-Parse-v1.2",
-    "openbmb/MiniCPM5-1B",
-    "onnx-community/functiongemma-270m-it-ONNX",
-    "hexgrad/Kokoro-82M",
-]
-
-DEFAULT_ACTIVE_STACK = RAVEN_QUALITY_STACK
-PRIVATE_RESEARCH_STACK = RAVEN_QUALITY_STACK
 
 
 def filter_catalog(adult_mode: bool = False) -> tuple[list[ModelCandidate], list[AdapterRecipe]]:
+    """
+    Filter the model and adapter catalogs based on visibility settings.
+    
+    Parameters:
+    	adult_mode (bool): When False, only public, non-adult content is included. When True, all content is included.
+    
+    Returns:
+    	tuple: (models, adapters) - filtered lists of ModelCandidate and AdapterRecipe objects matching the visibility criteria.
+    """
     models = [
         model
         for model in MODEL_CATALOG
@@ -231,17 +223,35 @@ def filter_catalog(adult_mode: bool = False) -> tuple[list[ModelCandidate], list
 
 
 def active_stack(adult_mode: bool = False) -> list[ModelCandidate]:
+    """
+    Builds the active model stack based on access mode.
+    
+    Returns:
+        list[ModelCandidate]: The active model candidates visible for the given mode.
+    """
     allowed, _ = filter_catalog(adult_mode)
     by_id = {model.repo_id: model for model in allowed}
-    return [by_id[repo_id] for repo_id in RAVEN_QUALITY_STACK if repo_id in by_id]
-
-
-def tiny_titan_stack() -> list[ModelCandidate]:
-    by_id = {model.repo_id: model for model in MODEL_CATALOG}
-    return [by_id[repo_id] for repo_id in TINY_TITAN_STACK if repo_id in by_id]
+    stack_ids = PRIVATE_RESEARCH_STACK if adult_mode else DEFAULT_ACTIVE_STACK
+    return [by_id[repo_id] for repo_id in stack_ids if repo_id in by_id]
 
 
 def parameter_budget(stack: list[ModelCandidate] | None = None) -> dict[str, float | str]:
+    """
+    Calculates the parameter budget summary for a model stack.
+    
+    Computes the total parameter count of models in the provided stack,
+    checks it against a 32 billion parameter limit, and returns budget details.
+    
+    Parameters:
+        stack: Model candidates to evaluate. If None, uses the default active stack.
+    
+    Returns:
+        A dictionary with the following keys:
+            - active_b (float): Total parameters in billions
+            - limit_b (float): Budget limit in billions
+            - remaining_b (float): Remaining budget in billions
+            - status (str): "pass" if within budget, "over_budget" otherwise
+    """
     chosen = stack or active_stack(False)
     total = round(sum(model.params_b for model in chosen), 2)
     return {
@@ -253,13 +263,17 @@ def parameter_budget(stack: list[ModelCandidate] | None = None) -> dict[str, flo
 
 
 def catalog_summary(adult_mode: bool = False) -> dict[str, int | float | str]:
+    """
+    Generates a summary of visible catalog entries and active model parameter budget.
+    
+    Returns:
+    	dict: A dictionary containing visible model and adapter counts, adult catalog status ("enabled" or "hidden"), and parameter budget metrics including total budget used, limit, remaining, and status ("pass" or "over_budget").
+    """
     models, adapters = filter_catalog(adult_mode)
     budget = parameter_budget(active_stack(adult_mode))
     return {
         "models_visible": len(models),
         "adapters_visible": len(adapters),
         "adult_catalog": "enabled" if adult_mode else "hidden",
-        "active_preset": "Raven Quality Stack",
-        "tiny_titan": "sidecar",
         **budget,
     }

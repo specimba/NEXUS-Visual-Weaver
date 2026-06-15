@@ -165,77 +165,6 @@ footer { display: none !important; }
 .nw-trust-card .nw-badge {
   margin-bottom: 1px;
 }
-.nw-readiness {
-  display: grid;
-  grid-template-columns: 190px minmax(180px, 260px) minmax(420px, 1fr);
-  gap: 10px;
-  align-items: center;
-  padding: 8px;
-  border-bottom: 1px solid #171c22;
-  background:
-    linear-gradient(90deg, rgba(255,54,95,.08), transparent 42%),
-    rgba(5, 7, 10, .98);
-}
-.nw-ready-head {
-  min-width: 0;
-}
-.nw-ready-head strong {
-  display: block;
-  font-size: 13px;
-  line-height: 1.2;
-}
-.nw-ready-head small {
-  color: var(--nw-muted);
-  font-size: 11px;
-}
-.nw-ready-meter {
-  height: 10px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: #1d242c;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
-}
-.nw-ready-meter i {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, var(--nw-green), var(--nw-cyan));
-  box-shadow: 0 0 16px rgba(32,217,232,.32);
-}
-.nw-ready-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-.nw-ready-chip {
-  border: 1px solid var(--nw-line);
-  border-radius: 999px;
-  padding: 4px 8px;
-  color: var(--nw-muted);
-  font-size: 10px;
-  font-weight: 750;
-  white-space: nowrap;
-}
-.nw-ready-chip.is-done {
-  color: #9ff4c6;
-  border-color: rgba(38,215,130,.42);
-  background: rgba(38,215,130,.08);
-}
-.nw-ready-chip.is-waiting {
-  color: #ffb7c4;
-  border-color: rgba(255,54,95,.34);
-  background: rgba(255,54,95,.06);
-}
-.nw-ready-blockers {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.nw-ready-blockers span {
-  color: var(--nw-muted);
-  font-size: 11px;
-  line-height: 1.35;
-}
 .nw-icon { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .nw-shell {
   display: grid;
@@ -1009,8 +938,6 @@ footer { display: none !important; }
 @media (max-width: 1100px) {
   .nw-topbar { grid-template-columns: 1fr; }
   .nw-trust-strip { grid-template-columns: 1fr; }
-  .nw-readiness { grid-template-columns: 1fr; }
-  .nw-ready-blockers { grid-column: 1; }
   .nw-shell { grid-template-columns: 1fr; grid-template-rows: auto; }
   .nw-rail, .nw-inspector, .nw-bottom { grid-column: 1; grid-row: auto; }
   .nw-rail { flex-direction: row; overflow-x: auto; }

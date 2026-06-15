@@ -17,6 +17,8 @@ class CreativeRequest:
     output_goal: str = "image_to_video"
     adult_mode: bool = False
     references: list[str] = field(default_factory=list)
+    creator_controls: dict[str, Any] = field(default_factory=dict)
+    reference_metadata: list[dict[str, Any]] = field(default_factory=list)
     created_at: str = field(default_factory=utc_now)
 
 
@@ -84,6 +86,11 @@ class AdapterRecipe:
     license: str = "unknown"
     adult_only: bool = False
     compatibility: str = "compatible"
+    weight_name: str | None = None
+    trigger_words: list[str] = field(default_factory=list)
+    compatible_repo_ids: list[str] = field(default_factory=list)
+    runtime_enabled: bool = True
+    requires_image: bool = False
 
 
 @dataclass(frozen=True)
