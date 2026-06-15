@@ -64,7 +64,18 @@ def _artifact_name(output_path: Any) -> str | None:
     """
     if not output_path:
         return None
-    return Path(str(output_path)).name
+    text = str(output_path)
+    if "\\" in text or re.match(r"^[A-Za-z]:[\\/]", text):
+        return PureWindowsPath(text).name
+    return Path(text).name
+
+
+def _safe_run_id(value: Any) -> str:
+    text = str(value or f"nw-{int(time.time())}")
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", text).strip(".-")
+    while ".." in safe:
+        safe = safe.replace("..", ".")
+    return safe or f"nw-{int(time.time())}"
 
 
 SENSITIVE_KEY_RE = re.compile(r"(token|secret|api[_-]?key|authorization|payload_excerpt|raw|base64|bytes)", re.IGNORECASE)
@@ -245,7 +256,8 @@ def write_export_packet(
         Dictionary with "path" (str) pointing to the written JSON file and "packet" (dict)
         containing the constructed export packet.
     """
-    run_id = getattr(getattr(run, "checkpoint", None), "checkpoint_id", f"nw-{int(time.time())}")
+    raw_run_id = getattr(getattr(run, "checkpoint", None), "checkpoint_id", f"nw-{int(time.time())}")
+    run_id = _safe_run_id(raw_run_id)
     run_adult_mode = bool(getattr(getattr(run, "request", None), "adult_mode", adult_mode))
     stack = list(getattr(run, "model_stack", None) or active_stack(run_adult_mode))
     budget = parameter_budget(stack)
@@ -260,11 +272,12 @@ def write_export_packet(
     st3gg_scan = _safe_scan(scan)
     minicpm_judge = _safe_provider(operator_state.get("minicpm_judge") or {})
     nemotron_evidence = _safe_provider(operator_state.get("nemotron_evidence") or {})
+    operator_provider_state = _safe_dict(operator_state.get("provider_state"))
     provider_states = {
         "generation": generation.get("provider_state"),
         "minicpm": minicpm_judge.get("status"),
         "nemotron": nemotron_evidence.get("status"),
-        "operator": operator_state.get("provider_state"),
+        "operator": operator_provider_state,
     }
     override_reason = _safe_dict(operator_state.get("st3gg_override_reason", ""))
     packet = {
@@ -272,8 +285,8 @@ def write_export_packet(
         "run_id": run_id,
         "created_at_epoch": int(time.time()),
         "adult_mode": run_adult_mode,
-        "prompt": getattr(getattr(run, "request", None), "prompt", ""),
-        "refined_prompt": getattr(getattr(run, "refined_prompt", None), "refined", ""),
+        "prompt": _safe_dict(getattr(getattr(run, "request", None), "prompt", "")),
+        "refined_prompt": _safe_dict(getattr(getattr(run, "refined_prompt", None), "refined", "")),
         "artifact": artifact,
         "image_basename": artifact,
         "creator_controls": creator_controls,
@@ -296,13 +309,13 @@ def write_export_packet(
         "minicpm_judge": minicpm_judge,
         "nemotron_evidence": nemotron_evidence,
         "checkpoint": {
-            "status": operator_state.get("checkpoint"),
-            "message": operator_state.get("message"),
-            "recommendation": getattr(getattr(run, "checkpoint", None), "recommendation", None),
+            "status": _safe_dict(operator_state.get("checkpoint")),
+            "message": _safe_dict(operator_state.get("message")),
+            "recommendation": _safe_dict(getattr(getattr(run, "checkpoint", None), "recommendation", None)),
             "trust_score": getattr(getattr(run, "checkpoint", None), "trust_score", None),
-            "required_actions": getattr(getattr(run, "checkpoint", None), "required_actions", []),
+            "required_actions": _safe_dict(getattr(getattr(run, "checkpoint", None), "required_actions", [])),
         },
-        "provider_state": operator_state.get("provider_state"),
+        "provider_state": operator_provider_state,
         "provider_states": provider_states,
         "model_stack": [
             {
@@ -324,6 +337,9 @@ def write_export_packet(
             "st3gg_export_gate": st3gg_scan.get("export_gate"),
         },
     }
-    target = export_root() / f"{run_id}.json"
+    root = export_root()
+    target = (root / f"{run_id}.json").resolve(strict=False)
+    if not (target == root or _is_within(target, root)):
+        raise ValueError("Unsafe export target path.")
     target.write_text(json.dumps(packet, indent=2, ensure_ascii=True), encoding="utf-8")
     return {"path": str(target), "packet": packet}

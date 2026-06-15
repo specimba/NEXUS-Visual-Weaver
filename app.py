@@ -629,7 +629,11 @@ def approve_checkpoint(
             "checkpoint": "approved",
             "generated_scan": scan,
             "export": export_state,
-            "message": "Checkpoint approved. Export is ready after clear ST3GG scan." if export_state == "clear" else "Checkpoint approved, but export still waits on ST3GG review.",
+            "message": (
+                "Checkpoint approved. Export is ready after clear ST3GG scan."
+                if export_state == "clear"
+                else "Checkpoint approved. ST3GG is not clear; add an override reason and click Prepare Export Packet to write an audit packet."
+            ),
         }
     return _render_stateful(run, adult_mode, scan, active_section, next_state)
 
@@ -675,9 +679,10 @@ def export_packet(
         next_state = {**state, "provider_state": "blocked", "export": scan.get("export_gate", "blocked"), "message": "Export blocked: ST3GG gate is not clear. Add an explicit override reason to write an audit packet."}
     else:
         export_state = "clear" if scan.get("export_gate") == "clear" else "override"
+        override_applies = scan.get("export_gate") != "clear" and bool(override_reason)
         export_operator_state = {
             **state,
-            **({"st3gg_override_reason": override_reason} if override_reason else {}),
+            **({"st3gg_override_reason": override_reason} if override_applies else {}),
             "export": export_state,
         }
         export = write_export_packet(run=run, scan=scan, operator_state=export_operator_state, adult_mode=adult_mode)
@@ -839,7 +844,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
             reset_btn = gr.Button("Reset Demo State", scale=1)
         override_reason = gr.Textbox(
             label="ST3GG Override Reason",
-            placeholder="Required only when exporting an audit packet for a reviewed/blocked artifact.",
+            placeholder="Required when ST3GG is review/blocked; explain why this audit packet may be written.",
             lines=2,
             max_lines=3,
         )

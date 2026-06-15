@@ -13,8 +13,8 @@ NEXUS Visual Weaver should open as a working command center, not a landing page.
 ## Current Strengths
 
 - Gradio-compatible app shape with `mcp_server=True`.
-- Pinned model governance is visible: FLUX.2 Klein 4B, LocateAnything-3B, and ST3GG.
-- Real FLUX.2 Klein 4B generation is wired for HF Space and falls back to an honest dry-run state outside Space.
+- Pinned model governance is visible: FLUX.2 Klein 9B, LocateAnything-3B, and ST3GG, with FLUX.2 Klein 4B kept as a sidecar fallback.
+- Real FLUX.2 Klein 9B generation is wired for HF Space, falls back to the 4B sidecar when needed, and reports an honest dry-run state outside Space.
 - Generated artifacts are scanned by ST3GG before checkpoint/export.
 - Above-fold trust strip makes ST3GG verdict, export gate, fixture evidence, and adult-mode safety boundaries visible immediately.
 - OpenBMB MiniCPM-V 4.6 and NVIDIA Nemotron evidence lanes are represented as real optional provider adapters with missing-secret/failed/success states.
@@ -48,5 +48,5 @@ NEXUS Visual Weaver should open as a working command center, not a landing page.
 | OpenBMB | Claim only after MiniCPM-V returns `success` in export evidence. |
 | NVIDIA | Claim only after Nemotron returns `success` in export evidence. |
 | OpenAI Codex | GitHub branch/PR provides Codex development trail. |
-| Tiny Titan | Public demo stack is eligible: active public models are each <=4B. |
+| Tiny Titan | Sidecar-only: claim only from an explicit 4B export packet where every active model is <=4B. |
 | Modal | Not claimed unless a real Modal job runs. |

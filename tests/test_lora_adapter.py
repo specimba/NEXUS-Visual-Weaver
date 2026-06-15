@@ -36,6 +36,11 @@ class FailingLoraPipe(FakeLoraPipe):
         raise RuntimeError("adapter load failed")
 
 
+class FailingSetAdapterPipe(FakeLoraPipe):
+    def set_adapters(self, adapter_names: list[str], adapter_weights: list[float]) -> None:
+        raise RuntimeError("adapter apply failed")
+
+
 class UnsupportedPipe:
     pass
 
@@ -93,6 +98,21 @@ def test_load_and_apply_reports_failed_without_raising() -> None:
 
     assert result["status"] == "failed"
     assert "RuntimeError" in result["message"]
+
+
+def test_load_and_apply_unloads_when_apply_fails() -> None:
+    recipe = AdapterRecipe(
+        repo_id="example/style-lora",
+        adapter_for="black-forest-labs/FLUX.2-klein-9B",
+        task="style",
+    )
+    pipe = FailingSetAdapterPipe()
+
+    result = load_and_apply(pipe, recipe, "black-forest-labs/FLUX.2-klein-9B")
+
+    assert result["status"] == "failed"
+    assert pipe.loaded == [("example/style-lora", {"adapter_name": "nexus_style"})]
+    assert pipe.unloaded is True
 
 
 def test_unload_all_uses_pipeline_unload_hook() -> None:

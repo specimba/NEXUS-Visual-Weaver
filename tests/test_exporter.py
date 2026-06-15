@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from nexus_visual_weaver.exporter import export_root, write_export_packet
@@ -71,6 +72,52 @@ def test_write_export_packet_records_evidence_without_secrets(monkeypatch) -> No
     assert payload["creator_controls"]["wardrobe"]["footwear"] == "platform boots"
     assert payload["reference_metadata"][0]["basename"] == "reference.png"
     assert "/data/" not in json.dumps(payload)
+
+
+def test_export_packet_sanitizes_run_id_before_writing(monkeypatch) -> None:
+    monkeypatch.setenv("NEXUS_EXPORT_DIR", "outputs/test-exports")
+    run = build_command_center_run("path traversal export brief")
+    run = replace(run, checkpoint=replace(run.checkpoint, checkpoint_id="../unsafe/path\\with:chars"))
+    scan = {"status": "pass", "export_gate": "clear"}
+
+    result = write_export_packet(run=run, scan=scan, operator_state=_make_base_state(), adult_mode=False)
+    path = Path(result["path"])
+    payload = json.loads(path.read_text(encoding="utf-8"))
+
+    assert path.parent == export_root()
+    assert ".." not in path.name
+    assert "\\" not in path.name
+    assert "/" not in path.name
+    assert payload["run_id"] == "unsafe-path-with-chars"
+
+
+def test_export_packet_sanitizes_prompt_checkpoint_and_provider_state(monkeypatch) -> None:
+    monkeypatch.setenv("NEXUS_EXPORT_DIR", "outputs/test-exports")
+    run = build_command_center_run("prompt contains MINICPM_API_KEY and C:/Users/speci.000/secret.png")
+    run = replace(
+        run,
+        refined_prompt=replace(run.refined_prompt, refined="refined path /data/nexus_visual_weaver/secret.png"),
+        checkpoint=replace(
+            run.checkpoint,
+            recommendation="set NEMOTRON_API_KEY",
+            required_actions=["review C:/Users/speci.000/Downloads/raw.png"],
+        ),
+    )
+    scan = {"status": "pass", "export_gate": "clear"}
+    state = _make_base_state(
+        provider_state="Bearer " + "hidden-provider-token",
+        message="operator message with HF_TOKEN",
+    )
+
+    result = write_export_packet(run=run, scan=scan, operator_state=state, adult_mode=False)
+    serialized = json.dumps(json.loads(Path(result["path"]).read_text(encoding="utf-8")))
+
+    assert "MINICPM_API_KEY" not in serialized
+    assert "NEMOTRON_API_KEY" not in serialized
+    assert "HF_TOKEN" not in serialized
+    assert "C:/Users/speci.000" not in serialized
+    assert "/data/" not in serialized
+    assert "Bearer " + "hidden-provider-token" not in serialized
 
 
 def test_export_packet_has_correct_schema_version(monkeypatch) -> None:

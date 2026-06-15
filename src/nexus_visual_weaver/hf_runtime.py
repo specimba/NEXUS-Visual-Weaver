@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from .catalog import ADAPTER_CATALOG
 from .lora_adapter import load_and_apply, unload_all
@@ -274,7 +275,7 @@ def generate_flux_image(
                 ).images[0]
             finally:
                 unload_all(pipe)
-            output_path = _output_dir() / f"nexus_flux_{int(time.time())}_{seed}.png"
+            output_path = _output_dir() / f"nexus_flux_{time.time_ns()}_{seed}_{uuid4().hex[:8]}.png"
             image.save(output_path)
             return HFGenerationResult(
                 status="success",

@@ -269,7 +269,7 @@ def test_generate_flux_image_reports_sidecar_fallback(monkeypatch) -> None:
     try:
         result = generate_flux_image("prompt", seed=7)
     finally:
-        for artifact in output_dir.glob("nexus_flux_*_7.png"):
+        for artifact in output_dir.glob("nexus_flux_*_7_*.png"):
             artifact.unlink(missing_ok=True)
 
     assert result.status == "success"
@@ -278,3 +278,5 @@ def test_generate_flux_image_reports_sidecar_fallback(monkeypatch) -> None:
     assert result.primary_error is not None
     assert "primary denied" in result.primary_error
     assert result.output_path is not None
+    assert Path(result.output_path).name.startswith("nexus_flux_")
+    assert "_7_" in Path(result.output_path).name

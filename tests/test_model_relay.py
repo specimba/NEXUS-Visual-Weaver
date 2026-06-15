@@ -201,6 +201,19 @@ def test_flux2_klein_9b_is_pinned_with_4b_sidecar_fallback() -> None:
     assert fallback.pinned is False
 
 
+def test_pinned_lane_fallbacks_respect_governance_filters() -> None:
+    relay = WeaverModelRelay()
+    fallback = relay.records["flux2-klein-4b-sidecar"]
+    fallback.health = "unhealthy"
+
+    decision = relay.select_lane("image_generation")
+
+    assert decision.primary is not None
+    assert decision.primary.model_id == "flux2-klein-9b-quality"
+    assert decision.fallbacks == []
+    assert any("flux2-klein-4b-sidecar: health=unhealthy" in reason for reason in decision.skipped)
+
+
 def test_flux2_klein_9b_is_not_pinned_and_in_private_research() -> None:
     relay = WeaverModelRelay()
 

@@ -196,7 +196,8 @@ class WeaverModelRelay:
         lane_records = [record for record in self.records.values() if record.lane == lane]
         if lane in PINNED_LANES:
             primary = next((record for record in lane_records if record.pinned), None)
-            fallbacks = [self.records[model_id] for model_id in (primary.fallback_chain if primary else ()) if model_id in self.records]
+            fallback_records = [self.records[model_id] for model_id in (primary.fallback_chain if primary else ()) if model_id in self.records]
+            fallbacks, skipped = self._eligible_records(fallback_records, budget_b, public_demo, strategy, now)
             return LaneDecision(
                 lane=lane,
                 strategy="pinned",
@@ -206,7 +207,7 @@ class WeaverModelRelay:
                 expected_cost_hint=primary.cost_hint if primary else "unavailable",
                 quota_impact=self._quota_impact(primary, now) if primary else {},
                 context_packet=context,
-                skipped=[] if primary else [f"{lane}: no pinned model registered"],
+                skipped=skipped if primary else [f"{lane}: no pinned model registered"],
             )
 
         candidates, skipped = self._eligible_records(lane_records, budget_b, public_demo, strategy, now)

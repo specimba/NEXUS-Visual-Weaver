@@ -116,6 +116,7 @@ def load_and_apply(
             pipe.set_adapters([adapter_name], adapter_weights=[recipe.weight])
         return _status("loaded", recipe, message="Adapter loaded and applied for this generation.", adapter_name=adapter_name)
     except Exception as exc:
+        unload_all(pipe)
         return _status("failed", recipe, message=_short_error(exc), adapter_name=adapter_name)
 
 

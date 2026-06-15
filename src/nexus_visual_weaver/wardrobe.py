@@ -17,6 +17,10 @@ SLOT_BLUEPRINTS: list[tuple[str, str, str, str, str]] = [
 ]
 
 
+def _material_token(value: object) -> str:
+    return str(value).strip().lower().replace("-", "_").replace(" ", "_")
+
+
 def build_outfit_graph(prompt: str, adult_mode: bool = False, controls: dict | None = None) -> OutfitGraph:
     """
     Constructs an outfit graph with wardrobe slots configured by prompt analysis and optional controls.
@@ -42,7 +46,7 @@ def build_outfit_graph(prompt: str, adult_mode: bool = False, controls: dict | N
         if name == "footwear" and controls.get("footwear"):
             description = str(controls["footwear"])
         if name == "jewelry" and controls.get("hardware"):
-            material = str(controls["hardware"])
+            material = _material_token(controls["hardware"])
         if controls.get("palette"):
             palette = str(controls["palette"])
         locked = any(token in lowered for token in name.split("_")) or material.replace("_", " ") in lowered

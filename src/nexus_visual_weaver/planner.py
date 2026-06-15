@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from uuid import uuid4
 
 from .catalog import ADAPTER_CATALOG, active_stack
@@ -34,12 +35,19 @@ def build_command_center_run(
     Returns:
         A GenerationRun containing the refined prompt, generated outfit, inspection results, model stack, adapters, video plan, lore components, and a human checkpoint with approval recommendation based on a computed trust score.
     """
-    controls = creator_controls or {}
-    references = reference_metadata or []
+    controls = deepcopy(creator_controls or {})
+    references = deepcopy(reference_metadata or [])
+    reference_ids: list[str] = []
+    for item in references:
+        if not isinstance(item, dict):
+            continue
+        value = item.get("id") or item.get("basename") or item.get("url_hash")
+        if value is not None and str(value):
+            reference_ids.append(str(value))
     request = CreativeRequest(
         prompt=prompt,
         adult_mode=adult_mode,
-        references=[str(item.get("id") or item.get("basename") or item.get("url_hash")) for item in references],
+        references=reference_ids,
         creator_controls=controls,
         reference_metadata=references,
     )

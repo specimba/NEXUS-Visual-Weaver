@@ -159,6 +159,34 @@ def test_operator_actions_transition_checkpoint_export_and_stop() -> None:
     assert stopped[13]["provider_state"] == "stopped"
 
 
+def test_clear_export_ignores_stale_override_reason(monkeypatch) -> None:
+    monkeypatch.setenv("NEXUS_EXPORT_DIR", "outputs/test-exports")
+    result = app.run_weave(
+        "gothic patent leather platform boots, crimson hardware",
+        "Strict",
+        "Wan2.2 I2V",
+        False,
+        None,
+        "Forge",
+    )
+    run = result[13]
+    artifact_path = app.ROOT / "outputs" / "test-clear-override-artifact.png"
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIEND\xaeB`\x82")
+    operator_state = {
+        **result[15],
+        "generation": {**result[15]["generation"], "output_path": str(artifact_path)},
+    }
+    clean_scan = {"status": "pass", "export_gate": "clear", "findings": [], "purification_actions": []}
+
+    approved = app.approve_checkpoint(run, False, clean_scan, "Forge", operator_state)
+    exported = app.export_packet(run, False, clean_scan, "Forge", approved[13], "stale text from prior blocked run")
+
+    assert exported[13]["provider_state"] == "exported"
+    assert exported[13]["export"] == "clear"
+    assert "st3gg_override_reason" not in exported[13]
+
+
 def test_export_blocks_without_checkpoint() -> None:
     result = app.run_weave(
         "gothic patent leather platform boots, crimson hardware",

@@ -94,6 +94,23 @@ def test_command_center_run_is_checkpointed() -> None:
     assert any(model.repo_id == "nvidia/LocateAnything-3B" for model in run.model_stack)
 
 
+def test_command_center_run_snapshots_controls_and_skips_empty_reference_ids() -> None:
+    controls = {"wardrobe": {"footwear": "platform boots"}}
+    references = [{"source": "upload"}, {"basename": "reference.png"}]
+
+    run = build_command_center_run(
+        "gothic couture archivist",
+        creator_controls=controls,
+        reference_metadata=references,
+    )
+    controls["wardrobe"]["footwear"] = "mutated"
+    references[1]["basename"] = "mutated.png"
+
+    assert run.request.references == ["reference.png"]
+    assert run.request.creator_controls["wardrobe"]["footwear"] == "platform boots"
+    assert run.request.reference_metadata[1]["basename"] == "reference.png"
+
+
 def test_security_scan_does_not_return_payload_excerpt() -> None:
     sample = Path(__file__).parent / "fixtures" / "sample.png"
     scan = scan_file(str(sample))
@@ -746,7 +763,7 @@ def test_build_outfit_graph_controls_override_hardware() -> None:
     jewelry_slot = next((s for s in outfit.slots if s.name == "jewelry"), None)
 
     assert jewelry_slot is not None
-    assert jewelry_slot.material == "silver occult buckles"
+    assert jewelry_slot.material == "silver_occult_buckles"
 
 
 def test_build_outfit_graph_locked_slots_control_locks_named_slots() -> None:

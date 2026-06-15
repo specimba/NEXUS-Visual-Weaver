@@ -8,13 +8,13 @@
 - Public Space URL: `https://build-small-hackathon-nexus-visual-weaver-a107340.hf.space/`
 - HF rollback SHA: `410a467c55d11e7308249198bd5fe0b2c190aec6`.
 - Branch discipline: use only `main` and `codex/specimba/ui-polish-command-center`; no extra recovery branches.
-- Primary goal: finish a countable Build Small submission with real FLUX.2 4B generation, ST3GG scan, optional OpenBMB MiniCPM-V judge evidence, optional NVIDIA Nemotron evidence, checkpointed export packet, README prize mapping, demo video, and social post.
+- Primary goal: finish a countable Build Small submission with real FLUX.2 Klein 9B generation, 4B sidecar fallback, ST3GG scan, optional OpenBMB MiniCPM-V judge evidence, optional NVIDIA Nemotron evidence, checkpointed export packet, README prize mapping, demo video, and social post.
 
 ## Secrets Needed
 
 Do not paste these into chat, commits, logs, or export packets.
 
-- `HF_TOKEN`: optional for public FLUX.2 Klein 4B access and required only if private/gated research lanes are enabled.
+- `HF_TOKEN`: required when the FLUX.2 Klein 9B Space runtime needs authenticated access; the 4B sidecar remains the public-safe fallback/Tiny Titan lane.
 - `MINICPM_BASE_URL`: OpenBMB OpenAI-compatible endpoint base URL.
 - `MINICPM_API_KEY`: OpenBMB bearer token.
 - `MINICPM_MODEL`: default `MiniCPM-V-4.6`.
@@ -39,7 +39,7 @@ Avoid pytest `--basetemp=C:\tmp` in this Windows sandbox if `tmp_path` fixtures 
 ## Runtime Flow
 
 1. `run_active_weave` builds the Raven Chronicle run packet.
-2. FLUX.2 Klein 4B generates the image on Space when HF runtime is enabled.
+2. FLUX.2 Klein 9B generates the image on Space when HF runtime is enabled, with FLUX.2 Klein 4B as the fallback/sidecar lane.
 3. Generated artifact is scanned by ST3GG.
 4. MiniCPM-V judge runs when OpenBMB secrets are present.
 5. Nemotron evidence runs when Nemotron/NVIDIA endpoint secrets are present.
@@ -51,14 +51,14 @@ Avoid pytest `--basetemp=C:\tmp` in this Windows sandbox if `tmp_path` fixtures 
 - OpenBMB prize claim requires `minicpm_judge.status == "success"` in an export packet.
 - NVIDIA prize claim requires `nemotron_evidence.status == "success"` in an export packet.
 - LocateAnything supports the grounding story but does not replace Nemotron for the NVIDIA prize.
-- Tiny Titan can be claimed only from a successful public-demo export packet because each active public model is <=4B.
-- FLUX.2 Klein 9B and OFFELLIA/Gemma remain private research options only.
+- Tiny Titan can be claimed only from an explicit 4B sidecar export packet where every active model is <=4B.
+- Raven Quality Stack uses FLUX.2 Klein 9B by default; OFFELLIA/Gemma remain private research options behind Adult Mode/catalog partitioning.
 - Modal is not claimed unless a real Modal job runs and is documented.
 
 ## Known Risks
 
 - GitHub CLI may fail behind proxy `127.0.0.1:9`; use local git status and HF verification when blocked.
-- Real FLUX generation depends on Space GPU availability and the public 4B runtime loading successfully.
+- Real FLUX generation depends on Space GPU availability and the 9B runtime loading successfully, with a 4B sidecar fallback when configured.
 - OpenBMB and Nemotron endpoints are optional and must show `missing secret` rather than fake success when not configured.
 - Demo video and social post links must be added before final submission.
 
