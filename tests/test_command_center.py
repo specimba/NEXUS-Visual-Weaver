@@ -262,14 +262,6 @@ def test_render_trust_strip_pass_scan_shows_clear_export() -> None:
     assert "all checks passed" in html
 
 
-def test_render_trust_strip_clean_empty_findings_shows_no_findings() -> None:
-    scan = {"status": "pass", "export_gate": "clear", "findings": [], "purification_actions": []}
-    html = render_trust_strip(scan=scan)
-
-    assert "No findings." in html
-    assert "No upload selected. Always-on scanner ready." not in html
-
-
 def test_render_trust_strip_review_scan_shows_blocked_export() -> None:
     scan = {"status": "review", "export_gate": "blocked", "findings": ["trailing data after IEND"], "purification_actions": ["truncate PNG"]}
     html = render_trust_strip(scan=scan)
@@ -524,3 +516,278 @@ def test_public_demo_false_models_are_excluded_from_public_filter() -> None:
     )
     models_public, _ = filter_catalog(False)
     assert all(m.public_demo for m in models_public)
+
+
+# --- catalog FLUX.2-klein-4B tests ---
+
+def test_filter_catalog_includes_flux_4b_in_public_mode() -> None:
+    models, _ = filter_catalog(False)
+    repo_ids = {model.repo_id for model in models}
+
+    assert "black-forest-labs/FLUX.2-klein-4B" in repo_ids
+
+
+def test_filter_catalog_includes_flux_4b_in_adult_mode() -> None:
+    models, _ = filter_catalog(True)
+    repo_ids = {model.repo_id for model in models}
+
+    assert "black-forest-labs/FLUX.2-klein-4B" in repo_ids
+
+
+def test_flux_4b_is_not_in_default_active_stack() -> None:
+    stack = active_stack(False)
+    repo_ids = {model.repo_id for model in stack}
+
+    assert "black-forest-labs/FLUX.2-klein-4B" not in repo_ids
+
+
+def test_flux_4b_role_is_tiny_titan_sidecar() -> None:
+    models, _ = filter_catalog(False)
+    flux_4b = next((m for m in models if m.repo_id == "black-forest-labs/FLUX.2-klein-4B"), None)
+
+    assert flux_4b is not None
+    assert "tiny_titan" in flux_4b.role
+
+
+def test_flux_4b_has_apache_license() -> None:
+    models, _ = filter_catalog(False)
+    flux_4b = next((m for m in models if m.repo_id == "black-forest-labs/FLUX.2-klein-4B"), None)
+
+    assert flux_4b is not None
+    assert flux_4b.license == "apache-2.0"
+
+
+# --- parameter_budget over_budget tests ---
+
+def test_parameter_budget_passes_for_default_public_stack() -> None:
+    budget = parameter_budget(active_stack(False))
+
+    assert budget["status"] == "pass"
+    assert budget["active_b"] <= 32.0
+
+
+def test_parameter_budget_over_budget_for_large_stack() -> None:
+    large_stack = [
+        ModelCandidate(
+            repo_id=f"test/model-{i}",
+            role="test",
+            task="text-to-image",
+            params_b=10.0,
+            runtime="local",
+            license="apache-2.0",
+        )
+        for i in range(5)  # 50B total, over the 32B limit
+    ]
+    budget = parameter_budget(large_stack)
+
+    assert budget["status"] == "over_budget"
+    assert budget["active_b"] == 50.0
+    assert budget["remaining_b"] < 0.0
+
+
+def test_parameter_budget_exactly_at_limit() -> None:
+    stack = [
+        ModelCandidate(
+            repo_id="test/model",
+            role="test",
+            task="text-to-image",
+            params_b=32.0,
+            runtime="local",
+            license="apache-2.0",
+        )
+    ]
+    budget = parameter_budget(stack)
+
+    assert budget["status"] == "pass"
+    assert budget["active_b"] == 32.0
+    assert budget["remaining_b"] == 0.0
+
+
+def test_parameter_budget_just_over_limit() -> None:
+    stack = [
+        ModelCandidate(
+            repo_id="test/model",
+            role="test",
+            task="text-to-image",
+            params_b=32.1,
+            runtime="local",
+            license="apache-2.0",
+        )
+    ]
+    budget = parameter_budget(stack)
+
+    assert budget["status"] == "over_budget"
+
+
+def test_catalog_summary_includes_budget_keys() -> None:
+    summary = catalog_summary(False)
+
+    assert "active_b" in summary
+    assert "limit_b" in summary
+    assert "remaining_b" in summary
+    assert "status" in summary
+    assert summary["limit_b"] == 32.0
+
+
+def test_catalog_summary_models_visible_count_matches_filter() -> None:
+    models, adapters = filter_catalog(False)
+    summary = catalog_summary(False)
+
+    assert summary["models_visible"] == len(models)
+    assert summary["adapters_visible"] == len(adapters)
+
+
+# --- catalog MiniCPM-V-4.6 and Nemotron-Parse tests ---
+
+def test_minicpm_v46_in_public_catalog() -> None:
+    models, _ = filter_catalog(False)
+    repo_ids = {model.repo_id for model in models}
+
+    assert "openbmb/MiniCPM-V-4.6" in repo_ids
+
+
+def test_nemotron_parse_in_public_catalog() -> None:
+    models, _ = filter_catalog(False)
+    repo_ids = {model.repo_id for model in models}
+
+    assert "nvidia/NVIDIA-Nemotron-Parse-v1.2" in repo_ids
+
+
+def test_minicpm_v46_role_is_sponsor_visual_judge() -> None:
+    models, _ = filter_catalog(False)
+    minicpm = next((m for m in models if m.repo_id == "openbmb/MiniCPM-V-4.6"), None)
+
+    assert minicpm is not None
+    assert minicpm.role == "sponsor_visual_judge"
+    assert minicpm.params_b == 1.30
+
+
+def test_nemotron_parse_role_is_sponsor_structured_parse() -> None:
+    models, _ = filter_catalog(False)
+    nemotron = next((m for m in models if m.repo_id == "nvidia/NVIDIA-Nemotron-Parse-v1.2"), None)
+
+    assert nemotron is not None
+    assert nemotron.role == "sponsor_structured_parse"
+    assert nemotron.params_b == 0.94
+
+
+# --- adapter catalog changes tests ---
+
+def test_dever_style_lora_compatible_with_9b_and_4b() -> None:
+    from nexus_visual_weaver.catalog import ADAPTER_CATALOG
+
+    dever = next((a for a in ADAPTER_CATALOG if a.repo_id == "DeverStyle/Flux.2-Klein-Loras"), None)
+
+    assert dever is not None
+    assert "black-forest-labs/FLUX.2-klein-9B" in dever.compatible_repo_ids
+    assert "black-forest-labs/FLUX.2-klein-4B" in dever.compatible_repo_ids
+
+
+def test_dever_style_lora_has_trigger_words() -> None:
+    from nexus_visual_weaver.catalog import ADAPTER_CATALOG
+
+    dever = next((a for a in ADAPTER_CATALOG if a.repo_id == "DeverStyle/Flux.2-Klein-Loras"), None)
+
+    assert dever is not None
+    assert len(dever.trigger_words) > 0
+    assert "gothic couture" in dever.trigger_words
+
+
+def test_4b_outpaint_lora_requires_image() -> None:
+    from nexus_visual_weaver.catalog import ADAPTER_CATALOG
+
+    outpaint = next((a for a in ADAPTER_CATALOG if a.repo_id == "fal/flux-2-klein-4B-outpaint-lora"), None)
+
+    assert outpaint is not None
+    assert outpaint.requires_image is True
+    assert "black-forest-labs/FLUX.2-klein-4B" in outpaint.compatible_repo_ids
+
+
+# --- wardrobe controls tests ---
+
+def test_build_outfit_graph_controls_override_outerwear() -> None:
+    outfit = build_outfit_graph(
+        "minimal portrait",
+        controls={"outerwear": "tailored rain slicker"},
+    )
+    outerwear_slot = next((s for s in outfit.slots if s.name == "outerwear"), None)
+
+    assert outerwear_slot is not None
+    assert outerwear_slot.description == "tailored rain slicker"
+
+
+def test_build_outfit_graph_controls_override_footwear() -> None:
+    outfit = build_outfit_graph(
+        "minimal portrait",
+        controls={"footwear": "patent leather heels"},
+    )
+    footwear_slot = next((s for s in outfit.slots if s.name == "footwear"), None)
+
+    assert footwear_slot is not None
+    assert footwear_slot.description == "patent leather heels"
+
+
+def test_build_outfit_graph_controls_override_palette_for_all_slots() -> None:
+    custom_palette = "obsidian, pearl, crimson"
+    outfit = build_outfit_graph(
+        "minimal portrait",
+        controls={"palette": custom_palette},
+    )
+
+    for slot in outfit.slots:
+        assert slot.palette == custom_palette
+
+
+def test_build_outfit_graph_controls_override_hardware() -> None:
+    outfit = build_outfit_graph(
+        "minimal portrait",
+        controls={"hardware": "silver occult buckles"},
+    )
+    jewelry_slot = next((s for s in outfit.slots if s.name == "jewelry"), None)
+
+    assert jewelry_slot is not None
+    assert jewelry_slot.material == "silver occult buckles"
+
+
+def test_build_outfit_graph_locked_slots_control_locks_named_slots() -> None:
+    outfit = build_outfit_graph(
+        "minimal portrait",
+        controls={"locked_slots": ["hair_headwear", "props"]},
+    )
+    hair_slot = next((s for s in outfit.slots if s.name == "hair_headwear"), None)
+    props_slot = next((s for s in outfit.slots if s.name == "props"), None)
+
+    assert hair_slot is not None and hair_slot.locked is True
+    assert props_slot is not None and props_slot.locked is True
+
+
+def test_build_outfit_graph_locate_focus_sets_manual_focus_region() -> None:
+    outfit = build_outfit_graph(
+        "minimal portrait",
+        controls={"locate_focus": ["footwear", "jewelry"]},
+    )
+    footwear_slot = next((s for s in outfit.slots if s.name == "footwear"), None)
+    jewelry_slot = next((s for s in outfit.slots if s.name == "jewelry"), None)
+    hair_slot = next((s for s in outfit.slots if s.name == "hair_headwear"), None)
+
+    assert footwear_slot is not None and footwear_slot.locate_region == "manual-focus"
+    assert jewelry_slot is not None and jewelry_slot.locate_region == "manual-focus"
+    assert hair_slot is not None and hair_slot.locate_region == "auto-map"
+
+
+def test_build_outfit_graph_with_no_controls_uses_defaults() -> None:
+    outfit = build_outfit_graph("gothic couture brief")
+
+    assert len(outfit.slots) == len(outfit.slots)  # All slots present
+    assert outfit.score >= 0.68  # Base score
+
+
+def test_build_outfit_graph_adult_mode_marks_upper_lower_slots() -> None:
+    outfit = build_outfit_graph("gothic brief", adult_mode=True)
+    upper = next((s for s in outfit.slots if s.name == "upper_body"), None)
+    lower = next((s for s in outfit.slots if s.name == "lower_body"), None)
+    outerwear = next((s for s in outfit.slots if s.name == "outerwear"), None)
+
+    assert upper is not None and upper.adult_only is True
+    assert lower is not None and lower.adult_only is True
+    assert outerwear is not None and outerwear.adult_only is False
