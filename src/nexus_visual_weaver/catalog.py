@@ -204,6 +204,15 @@ PRIVATE_RESEARCH_STACK = [
 
 
 def filter_catalog(adult_mode: bool = False) -> tuple[list[ModelCandidate], list[AdapterRecipe]]:
+    """
+    Filter the model and adapter catalogs based on visibility settings.
+    
+    Parameters:
+    	adult_mode (bool): When False, only public, non-adult content is included. When True, all content is included.
+    
+    Returns:
+    	tuple: (models, adapters) - filtered lists of ModelCandidate and AdapterRecipe objects matching the visibility criteria.
+    """
     models = [
         model
         for model in MODEL_CATALOG
@@ -214,6 +223,12 @@ def filter_catalog(adult_mode: bool = False) -> tuple[list[ModelCandidate], list
 
 
 def active_stack(adult_mode: bool = False) -> list[ModelCandidate]:
+    """
+    Builds the active model stack based on access mode.
+    
+    Returns:
+        list[ModelCandidate]: The active model candidates visible for the given mode.
+    """
     allowed, _ = filter_catalog(adult_mode)
     by_id = {model.repo_id: model for model in allowed}
     stack_ids = PRIVATE_RESEARCH_STACK if adult_mode else DEFAULT_ACTIVE_STACK
@@ -221,6 +236,22 @@ def active_stack(adult_mode: bool = False) -> list[ModelCandidate]:
 
 
 def parameter_budget(stack: list[ModelCandidate] | None = None) -> dict[str, float | str]:
+    """
+    Calculates the parameter budget summary for a model stack.
+    
+    Computes the total parameter count of models in the provided stack,
+    checks it against a 32 billion parameter limit, and returns budget details.
+    
+    Parameters:
+        stack: Model candidates to evaluate. If None, uses the default active stack.
+    
+    Returns:
+        A dictionary with the following keys:
+            - active_b (float): Total parameters in billions
+            - limit_b (float): Budget limit in billions
+            - remaining_b (float): Remaining budget in billions
+            - status (str): "pass" if within budget, "over_budget" otherwise
+    """
     chosen = stack or active_stack(False)
     total = round(sum(model.params_b for model in chosen), 2)
     return {
@@ -232,6 +263,12 @@ def parameter_budget(stack: list[ModelCandidate] | None = None) -> dict[str, flo
 
 
 def catalog_summary(adult_mode: bool = False) -> dict[str, int | float | str]:
+    """
+    Generates a summary of visible catalog entries and active model parameter budget.
+    
+    Returns:
+    	dict: A dictionary containing visible model and adapter counts, adult catalog status ("enabled" or "hidden"), and parameter budget metrics including total budget used, limit, remaining, and status ("pass" or "over_budget").
+    """
     models, adapters = filter_catalog(adult_mode)
     budget = parameter_budget(active_stack(adult_mode))
     return {

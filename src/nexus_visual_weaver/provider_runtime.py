@@ -31,10 +31,22 @@ class ProviderJudgeResult:
     latency_seconds: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """
+        Convert the dataclass instance to a dictionary.
+        
+        Returns:
+        	dict[str, Any]: A dictionary representation of the dataclass fields.
+        """
         return asdict(self)
 
 
 def _short_error(exc: BaseException) -> str:
+    """
+    Format an exception as a compact single-line error string.
+    
+    Returns:
+    	A string with the exception class name and message, truncated to approximately 360 characters.
+    """
     text = str(exc).replace("\n", " ").strip()
     if len(text) > 360:
         text = text[:357] + "..."
@@ -42,6 +54,12 @@ def _short_error(exc: BaseException) -> str:
 
 
 def _image_data_url(path: str | None) -> str | None:
+    """
+    Generates a data URL from a local image file.
+    
+    Returns:
+        A data URL string if the file exists and is readable, None otherwise.
+    """
     if not path:
         return None
     target = Path(path)
@@ -57,6 +75,19 @@ def _image_data_url(path: str | None) -> str | None:
 
 
 def _post_json(url: str, token: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
+    """
+    Send an authenticated JSON POST request and return the parsed response.
+    
+    Raises ValueError if the URL is not an HTTP or HTTPS URL with a host.
+    
+    Parameters:
+    	token (str): Bearer token for authorization
+    	payload (dict[str, Any]): Data to send as JSON in the request body
+    	timeout (float): Request timeout in seconds
+    
+    Returns:
+    	dict[str, Any]: Parsed JSON response body
+    """
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError(f"Invalid URL: expected http(s) URL with host, got {url!r}.")
@@ -75,6 +106,17 @@ def _post_json(url: str, token: str, payload: dict[str, Any], timeout: float) ->
 
 
 def _extract_content(response: dict[str, Any]) -> str:
+    """
+    Extract the message content from a chat-completions-style response.
+    
+    If the extracted content is a string, returns it as-is. If it is another type, serializes it to JSON. Returns an empty string if no choices are present in the response.
+    
+    Parameters:
+        response: A dictionary representing a chat-completions API response.
+    
+    Returns:
+        The extracted content as a string, or an empty string if unavailable.
+    """
     choices = response.get("choices") or []
     if not choices:
         return ""
@@ -86,6 +128,14 @@ def _extract_content(response: dict[str, Any]) -> str:
 
 
 def _safe_json_from_text(text: str) -> dict[str, Any]:
+    """
+    Extract and parse a JSON object from text, falling back to raw text summary.
+    
+    Attempts to parse JSON from the input, extracting the outermost braces-delimited substring if necessary. If parsing fails or the result is not a dictionary, returns a dictionary with the input text (first 1200 characters) under the "raw_summary" key. Returns an empty dictionary if the input is empty after whitespace stripping.
+    
+    Returns:
+        dict[str, Any]: Parsed JSON object if valid, or a dictionary with "raw_summary" key and text if parsing fails or result is not a dict.
+    """
     stripped = text.strip()
     if not stripped:
         return {}
@@ -108,6 +158,23 @@ def judge_with_minicpm(
     wardrobe_summary: str,
     timeout: float = 45.0,
 ) -> ProviderJudgeResult:
+    """
+    Evaluate a generated image against visual and wardrobe requirements using MiniCPM-V.
+    
+    Configuration is read from environment variables: MINICPM_BASE_URL, MINICPM_API_KEY 
+    (or OPENBMB_API_KEY), and optionally MINICPM_MODEL.
+    
+    Parameters:
+        prompt (str): Brief describing the visual and style requirements.
+        image_path (str | None): Path to the generated image file.
+        scan (dict[str, Any]): Metadata including 'export_gate' status.
+        wardrobe_summary (str): Wardrobe context and constraints.
+        timeout (float): Request timeout in seconds. Default is 45.0.
+    
+    Returns:
+        ProviderJudgeResult: A result object with judgment status (success, failed, 
+        missing_secret, no_artifact), provider metadata, evidence dict, and request latency.
+    """
     base_url = os.environ.get("MINICPM_BASE_URL", "").rstrip("/")
     token = os.environ.get("MINICPM_API_KEY") or os.environ.get("OPENBMB_API_KEY")
     model = os.environ.get("MINICPM_MODEL", "MiniCPM-V-4.6")
@@ -187,6 +254,20 @@ def judge_with_nemotron(
     minicpm_result: dict[str, Any] | None = None,
     timeout: float = 45.0,
 ) -> ProviderJudgeResult:
+    """
+    Call Nemotron to generate structured evidence for a visual creation run.
+    
+    Returns a standardized ProviderJudgeResult with status "success" (including parsed
+    evidence and measured latency), "missing_secret" if credentials are not configured,
+    or "failed" if the API call encounters an error.
+    
+    Parameters:
+        minicpm_result (dict[str, Any] | None): Optional prior judgment output from MiniCPM.
+        timeout (float): Request timeout in seconds (default: 45.0).
+    
+    Returns:
+        ProviderJudgeResult: Result with status, evidence, and measured latency.
+    """
     base_url = os.environ.get("NEMOTRON_BASE_URL", "").rstrip("/")
     token = os.environ.get("NEMOTRON_API_KEY") or os.environ.get("NVIDIA_API_KEY")
     model = os.environ.get("NEMOTRON_MODEL", "nvidia/NVIDIA-Nemotron-Parse-v1.2")

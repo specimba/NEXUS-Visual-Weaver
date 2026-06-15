@@ -59,7 +59,17 @@ def _default_operator_state() -> dict[str, Any]:
 
 
 def _zero_gpu_entrypoint(fn: Any) -> Any:
-    """Expose one callback to ZeroGPU without making local development depend on Spaces."""
+    """
+    Optionally wrap a function with ZeroGPU acceleration.
+    
+    If the spaces module is available and provides GPU support, wraps the function with `spaces.GPU(duration=300)`. Otherwise, returns the function unchanged.
+    
+    Parameters:
+        fn: The callback function.
+    
+    Returns:
+        The function, optionally wrapped with ZeroGPU acceleration.
+    """
     gpu_decorator = getattr(spaces, "GPU", None) if spaces is not None else None
     if gpu_decorator is None:
         return fn
@@ -67,10 +77,22 @@ def _zero_gpu_entrypoint(fn: Any) -> Any:
 
 
 def _relay_snapshot(adult_mode: bool = False) -> dict[str, Any]:
+    """
+    Retrieves the relay dashboard snapshot based on visibility mode.
+    
+    Returns:
+        dict[str, Any]: Dashboard snapshot containing relay status and model information.
+    """
     return MODEL_RELAY.dashboard_snapshot(public_demo=not adult_mode)
 
 
 def _file_path(uploaded: Any) -> str | None:
+    """
+    Extract a file path from various upload input formats.
+    
+    Returns:
+        str | None: The file path string, or None if the input is None or lacks a valid path.
+    """
     if uploaded is None:
         return None
     if isinstance(uploaded, str):
@@ -80,6 +102,12 @@ def _file_path(uploaded: Any) -> str | None:
 
 
 def _safe_file_hash(path: str | None) -> tuple[str | None, int | None]:
+    """
+    Compute the SHA-256 hash and size of a file.
+    
+    Returns:
+        tuple[str | None, int | None]: The file's SHA-256 hash as a hex string and size in bytes. Returns (None, None) if the path is falsy or the file cannot be read.
+    """
     if not path:
         return None, None
     try:
@@ -91,6 +119,14 @@ def _safe_file_hash(path: str | None) -> tuple[str | None, int | None]:
 
 
 def _safe_reference_url_metadata(reference_url: str | None) -> dict[str, Any] | None:
+    """
+    Validates a reference URL and extracts its metadata.
+    
+    Returns:
+        A dict with status "metadata_only" containing domain (lowercased) and URL hash if valid;
+        a dict with status "invalid_url" if the URL scheme is not HTTP(S) or domain is missing;
+        None if reference_url is falsy.
+    """
     if not reference_url:
         return None
     parsed = urlparse(reference_url.strip())
@@ -107,6 +143,20 @@ def _safe_reference_url_metadata(reference_url: str | None) -> dict[str, Any] | 
 
 
 def _reference_metadata(uploaded: Any, reference_url: str | None, scan: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Builds a list of metadata records from an uploaded file and/or reference URL.
+    
+    For an uploaded file, includes basename, SHA-256 hash, size, and scan results (status,
+    export gate, magic, extension). For a reference URL, includes domain, URL hash, and status.
+    
+    Parameters:
+    	uploaded: An uploaded file object, path string, or None.
+    	reference_url: Optional reference URL string.
+    	scan: Dictionary of ST3GG scan results for the uploaded file.
+    
+    Returns:
+    	List of metadata dictionaries for the file and/or URL. Empty if neither is provided.
+    """
     records: list[dict[str, Any]] = []
     path = _file_path(uploaded)
     if path:
@@ -140,6 +190,13 @@ def _creator_controls(
     hardware: str | None = None,
     locate_focus: list[str] | None = None,
 ) -> dict[str, Any]:
+    """
+    Create a control object combining wardrobe selections with generation policy and reasoning configuration.
+    
+    Returns:
+        dict: Nested structure containing reasoning mode, video preset, wardrobe selections with locked slots,
+              and FLUX generation configuration.
+    """
     wardrobe = {
         "silhouette": silhouette or "structured long coat",
         "outerwear": outerwear or "black patent leather long coat",
@@ -163,6 +220,18 @@ def _creator_controls(
 
 
 def _prompt_with_controls(prompt: str, controls: dict[str, Any]) -> str:
+    """
+    Augments a prompt with wardrobe control parameters.
+    
+    If any wardrobe fields are specified in the controls, appends them to the
+    prompt with a "Wardrobe controls:" prefix. Otherwise returns the prompt unchanged.
+    
+    Parameters:
+    	controls (dict[str, Any]): A controls dictionary containing a "wardrobe" key with fields for silhouette, outerwear, upper_body, footwear, palette, and hardware.
+    
+    Returns:
+    	str: The prompt with wardrobe controls appended, or the original prompt if no wardrobe items are specified.
+    """
     wardrobe = controls.get("wardrobe", {})
     additions = [
         wardrobe.get("silhouette"),
@@ -177,12 +246,24 @@ def _prompt_with_controls(prompt: str, controls: dict[str, Any]) -> str:
 
 
 def _generated_output_path(operator_state: dict[str, Any] | None) -> str | None:
+    """
+    Extract the generated artifact output path from the operator state.
+    
+    Returns:
+        The output path string if a generated artifact exists, None otherwise.
+    """
     generation = (operator_state or {}).get("generation") or {}
     output_path = generation.get("output_path")
     return str(output_path) if output_path else None
 
 
 def _authoritative_generated_scan(operator_state: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    Obtain the current scan for a generated artifact.
+    
+    Returns:
+    	dict[str, Any]: A scan record sourced from the generated output file, stored state, or a default scan.
+    """
     output_path = _generated_output_path(operator_state)
     if output_path:
         return scan_file(output_path)
@@ -191,6 +272,15 @@ def _authoritative_generated_scan(operator_state: dict[str, Any] | None) -> dict
 
 
 def _checkpoint_seed(checkpoint_id: str) -> int:
+    """
+    Derives a numeric seed from a checkpoint ID.
+    
+    Parameters:
+        checkpoint_id (str): A checkpoint identifier string.
+    
+    Returns:
+        int: An integer seed bounded to less than 1,000,000, or 0 if no valid seed data can be extracted from the checkpoint ID.
+    """
     suffix = "".join(char for char in checkpoint_id[-8:] if char in "0123456789abcdefABCDEF")
     if not suffix:
         return 0
@@ -201,6 +291,12 @@ def _checkpoint_seed(checkpoint_id: str) -> int:
 
 
 def _wardrobe_summary(run: Any) -> str:
+    """
+    Formats outfit wardrobe slots into a semicolon-separated summary string.
+    
+    Returns:
+        A semicolon-separated string listing each outfit slot's name, description, material, palette, and locked status.
+    """
     slots = getattr(getattr(run, "outfit", None), "slots", []) or []
     return "; ".join(
         f"{slot.name}: {slot.description}, material={slot.material}, palette={slot.palette}, locked={slot.locked}"
@@ -244,6 +340,14 @@ def run_weave(
     hardware: str | None = None,
     reference_url: str | None = None,
 ) -> tuple[Any, ...]:
+    """
+    Execute the complete weaving workflow from prompt through image generation and evaluation.
+    
+    Assembles wardrobe controls, generates an image via FLUX, scans and judges the output through ST3GG scanning and dual judges (Minicpm and Nemotron), and compiles operator state reflecting generation status, checkpoint readiness, and export gating.
+    
+    Returns:
+        Tuple containing dashboard region HTML fragments (topbar, command_rail, workflow, operations, inspector, drawer, status, artifacts, providers), catalog HTML, run data, catalog summary, scan results, operator state with generation details and judge evidence, and button state updates.
+    """
     prompt = prompt.strip() or DEFAULT_PROMPT
     controls = _creator_controls(
         reasoning_mode=reasoning_mode,
@@ -333,6 +437,14 @@ def toggle_adult_visibility(
     active_section: str,
     upload: Any,
 ) -> tuple[Any, ...]:
+    """
+    Update the dashboard to reflect a change in adult content visibility.
+    
+    Re-scans any uploaded file and regenerates all dashboard regions to show or hide adult content while maintaining ST3GG, consent, and export gates.
+    
+    Returns:
+    	tuple: Updated UI fragments and state (topbar, command rail, operations, inspector, artifacts, providers, catalog table, catalog summary, scan metadata, operator state).
+    """
     scan = scan_file(_file_path(upload))
     operator_state = {
         **_default_operator_state(),
@@ -361,10 +473,12 @@ def refresh_section(
     operator_state: dict[str, Any] | None,
 ) -> tuple[str, str, str, str, str, dict[str, Any]]:
     """
-    Updates dashboard regions for the selected navigation section.
-
+    Render dashboard regions for the currently selected navigation section.
+    
     Returns:
-        A tuple containing HTML strings for command_rail, operations, inspector, artifacts, and providers regions, followed by the security scan results.
+        A tuple of (command_rail, operations, inspector, artifacts, providers, scan),
+        where the first five elements are HTML strings for dashboard regions and the last
+        is the ST3GG scan results dictionary.
     """
     scan = scan or scan_file(None)
     regions = _dashboard_regions(
@@ -384,6 +498,25 @@ def _render_stateful(
     active_section: str,
     operator_state: dict[str, Any],
 ) -> tuple[Any, ...]:
+    """
+    Render the dashboard with current state and return all UI outputs and state objects.
+    
+    Ensures scan data exists, calls the dashboard region renderer with current state, and assembles
+    a comprehensive tuple of HTML fragments, state objects, and button updates for Gradio output.
+    
+    Parameters:
+    	run: The current run object, or None if no run is active.
+    	adult_mode: Whether adult-mode visibility is enabled.
+    	scan: Scan/ST3GG evidence dict. If None or falsy, defaults to empty scan from scan_file.
+    	active_section: The currently active dashboard section identifier.
+    	operator_state: Current operator state dict containing provider status, checkpoint, export, and messaging.
+    
+    Returns:
+    	A tuple containing: topbar, command_rail, workflow, operations, inspector, drawer, status,
+    	artifacts, providers (all HTML fragments), catalog table HTML, run dict (or empty dict),
+    	catalog summary, scan dict, operator_state dict, and a Gradio update object for the stop
+    	button (interactive if run exists and provider is neither idle, stopped, nor exported).
+    """
     scan = scan or scan_file(None)
     regions = _dashboard_regions(
         run=run,
@@ -419,6 +552,16 @@ def scan_reference(
     operator_state: dict[str, Any] | None,
     reference_url: str | None = None,
 ) -> tuple[Any, ...]:
+    """
+    Scan and evaluate a reference image or URL, updating the operator state with findings.
+    
+    Parameters:
+        reference_url (str | None): Optional URL for reference metadata validation.
+            Only domain and URL hash are recorded; no content crawling or copying occurs.
+    
+    Returns:
+        Rendered dashboard outputs and the computed generated scan.
+    """
     state = operator_state or _default_operator_state()
     reference_path = _file_path(upload)
     reference_scan = scan_file(reference_path)
@@ -456,6 +599,12 @@ def approve_checkpoint(
     active_section: str,
     operator_state: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
+    """
+    Approves the checkpoint if a run and generated artifact exist, blocking approval otherwise. Sets provider readiness based on the ST3GG export gate status.
+    
+    Returns:
+    	tuple[Any, ...]: Updated dashboard and operator state reflecting the checkpoint decision.
+    """
     state = operator_state or _default_operator_state()
     scan = _authoritative_generated_scan(state)
     if run is None:
@@ -488,6 +637,26 @@ def export_packet(
     operator_state: dict[str, Any] | None,
     override_reason: str | None = None,
 ) -> tuple[Any, ...]:
+    """
+    Prepare an export packet for the generated artifact with precondition validation and ST3GG gating.
+    
+    Validates that a run, approved checkpoint, and generated artifact exist, and checks the
+    ST3GG export gate status. Blocks export if any precondition fails or if the gate is not
+    clear (unless an explicit override reason is provided). Writes a governed export packet
+    when the gate is clear, or an audit-marked packet when overridden.
+    
+    Parameters:
+        run: Active run packet; export is blocked if None.
+        adult_mode: Whether adult content is enabled for the export.
+        scan: ST3GG scan results; checked for export gate status.
+        active_section: Current UI section for rendering.
+        operator_state: Current operator state; defaults to idle state if None.
+        override_reason: Reason to override when ST3GG gate is not clear.
+    
+    Returns:
+        Tuple containing dashboard region HTML, run dict, catalog outputs, scan, operator state,
+        and stop button interactive state.
+    """
     state = operator_state or _default_operator_state()
     scan = _authoritative_generated_scan(state)
     override_reason = (override_reason or "").strip()
@@ -524,6 +693,15 @@ def stop_provider_job(
     active_section: str,
     operator_state: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
+    """
+    Stop the active provider job.
+    
+    Halts the current image generation or provider handoff, preserving local evidence and 
+    the dry-run packet. Re-renders the dashboard with provider state set to stopped.
+    
+    Returns:
+        tuple[Any, ...]: Dashboard region HTML fragments, run dict, scan dict, operator state, and UI control updates.
+    """
     scan = scan or scan_file(None)
     next_state = {
         **(operator_state or _default_operator_state()),
@@ -537,6 +715,12 @@ def reset_demo(
     adult_mode: bool,
     active_section: str,
 ) -> tuple[Any, ...]:
+    """
+    Reset the application to its initial state by clearing all generated evidence and reinitializing operator state.
+    
+    Returns:
+    	tuple[Any, ...]: Dashboard region HTML fragments, catalog table, empty run state, catalog summary, scan state, operator state, and button state for a reset application.
+    """
     scan = scan_file(None)
     operator_state = _default_operator_state()
     regions = _dashboard_regions(adult_mode=adult_mode, scan=scan, active_section=active_section, operator_state=operator_state)

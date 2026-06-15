@@ -18,6 +18,17 @@ SLOT_BLUEPRINTS: list[tuple[str, str, str, str, str]] = [
 
 
 def build_outfit_graph(prompt: str, adult_mode: bool = False, controls: dict | None = None) -> OutfitGraph:
+    """
+    Constructs an outfit graph with wardrobe slots configured by prompt analysis and optional controls.
+    
+    Parameters:
+    	prompt (str): Text to analyze for slot configuration and locking keywords.
+    	adult_mode (bool): If True, marks upper_body and lower_body slots as adult-only. Defaults to False.
+    	controls (dict | None): Optional configuration dict with keys: locked_slots, locate_focus, outerwear, upper_body, footwear, hardware, palette.
+    
+    Returns:
+    	OutfitGraph: Graph containing configured wardrobe slots and a computed score.
+    """
     lowered = prompt.lower()
     controls = controls or {}
     locked_slots = set(controls.get("locked_slots") or [])

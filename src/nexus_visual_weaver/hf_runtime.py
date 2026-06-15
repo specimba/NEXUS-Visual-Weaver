@@ -40,6 +40,12 @@ class HFGenerationResult:
     primary_error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """
+        Convert the result to a dictionary.
+        
+        Returns:
+            The result as a dictionary.
+        """
         return asdict(self)
 
 
@@ -75,10 +81,24 @@ def _short_error(exc: BaseException) -> str:
 
 
 def _hf_token() -> str | None:
+    """
+    Retrieve the HuggingFace authentication token from environment variables.
+    
+    Checks HF_TOKEN first, then HUGGING_FACE_HUB_TOKEN.
+    
+    Returns:
+    	str | None: The token if available, None otherwise.
+    """
     return os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
 
 
 def active_flux_repo_id() -> str:
+    """
+    Determines the FLUX repository ID based on environment configuration.
+    
+    Returns:
+        str: The FLUX repository ID to use for image generation.
+    """
     configured = os.environ.get("NEXUS_FLUX_REPO_ID")
     if configured:
         return configured
@@ -88,6 +108,20 @@ def active_flux_repo_id() -> str:
 
 
 def _repo_candidates(repo_id: str) -> list[str]:
+    """
+    Return a list of repository candidates for generation attempts.
+    
+    The primary repo_id is always included. If repo_id is not the Tiny Titan
+    model and fallback is not disabled via NEXUS_DISABLE_TINY_TITAN_FALLBACK,
+    the Tiny Titan repository is appended as a fallback candidate.
+    
+    Parameters:
+        repo_id (str): The primary FLUX model repository identifier.
+    
+    Returns:
+        list[str]: Repository IDs to attempt, starting with the primary repo
+        and optionally including a fallback candidate.
+    """
     candidates = [repo_id]
     if repo_id != TINY_TITAN_FLUX_REPO_ID and os.environ.get("NEXUS_DISABLE_TINY_TITAN_FALLBACK") != "1":
         candidates.append(TINY_TITAN_FLUX_REPO_ID)
@@ -95,6 +129,18 @@ def _repo_candidates(repo_id: str) -> list[str]:
 
 
 def _get_flux_pipe(repo_id: str, torch_module: Any, pipeline_cls: Any, token: str | None) -> Any:
+    """
+    Get or load a cached FLUX pipeline from a Hugging Face repository.
+    
+    Maintains a thread-safe cache of pipelines keyed by repository ID to avoid repeated loading.
+    
+    Parameters:
+        torch_module: The torch module, providing the dtype for the pipeline.
+        pipeline_cls: The pipeline class (e.g., Flux2KleinPipeline) to instantiate.
+    
+    Returns:
+        A FLUX pipeline instance.
+    """
     with _PIPELINE_CACHE_LOCK:
         cached = _PIPELINE_CACHE.get(repo_id)
         if cached is not None:
@@ -106,12 +152,32 @@ def _get_flux_pipe(repo_id: str, torch_module: Any, pipeline_cls: Any, token: st
 
 
 def _adapter_recipe(repo_id: str | None) -> AdapterRecipe | None:
+    """
+    Retrieves an adapter recipe from the catalog by repository identifier.
+    
+    Returns:
+        AdapterRecipe | None: The matching adapter recipe, or None if no recipe is found.
+    """
     if not repo_id:
         return None
     return next((recipe for recipe in ADAPTER_CATALOG if recipe.repo_id == repo_id), None)
 
 
 def default_lora_repo_id(target_repo_id: str) -> str | None:
+    """
+    Selects the default LoRA adapter compatible with a FLUX repository.
+    
+    Returns the repository ID of the first adapter that is runtime-enabled, is not
+    adult-only, does not require an input image, and is compatible with the target
+    repository.
+    
+    Parameters:
+        target_repo_id (str): The FLUX repository ID to find a compatible adapter for.
+    
+    Returns:
+        The repository ID of the first matching adapter, or `None` if no compatible
+        adapter is found.
+    """
     for recipe in ADAPTER_CATALOG:
         compatible_ids = {recipe.adapter_for, *recipe.compatible_repo_ids}
         if recipe.runtime_enabled and not recipe.adult_only and not recipe.requires_image and target_repo_id in compatible_ids:
@@ -129,6 +195,12 @@ def generate_flux_image(
     lora_repo_id: str | None = None,
     adult_mode: bool = False,
 ) -> HFGenerationResult:
+    """
+    Generate a FLUX.2 image from a text prompt with optional LoRA adapter application.
+    
+    Returns:
+        HFGenerationResult: Immutable container with generation status, image output path, execution latency, and LoRA application results.
+    """
     repo_id = active_flux_repo_id()
     selected_lora = lora_repo_id if lora_repo_id is not None else default_lora_repo_id(repo_id)
     recipe = _adapter_recipe(selected_lora)

@@ -179,6 +179,14 @@ class WeaverModelRelay:
         public_demo: bool = True,
         strategy: str = "quality_first",
     ) -> LaneDecision:
+        """
+        Selects a helper model for the given lane based on budget, quota, and selection strategy.
+        
+        Returns:
+            LaneDecision: A decision containing the selected primary model (if any), fallback
+                options, the selection strategy used, selection reasoning, expected cost estimate,
+                quota impact details, and information about skipped ineligible candidates.
+        """
         lane = self.normalize_lane(lane)
         strategy = self.normalize_strategy(strategy)
         budget_b = float(budget if budget is not None else (32.0 if lane in PINNED_LANES else DEFAULT_ROTATION_BUDGET_B))
@@ -430,6 +438,12 @@ class WeaverModelRelay:
 
 
 def default_model_records() -> list[ModelRecord]:
+    """
+    Provides the default registry of helper models across all lanes.
+    
+    Returns:
+    	list[ModelRecord]: A list of preconfigured model records spanning pinned lanes (image_generation, grounding, security) and rotatable lanes (prompt_router, taste_judge, audio_lore_tts, video_repair, hf_catalog_research, modal_job_runner, private_image_research), each with quota limits, performance metrics, and fallback chains.
+    """
     return [
         ModelRecord(
             model_id="flux2-klein-9b-quality",

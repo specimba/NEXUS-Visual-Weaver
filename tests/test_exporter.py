@@ -6,6 +6,15 @@ from nexus_visual_weaver.planner import build_command_center_run
 
 
 def _make_base_state(**overrides):
+    """
+    Create a test operator state payload with optional field overrides.
+    
+    Parameters:
+    	**overrides: Fields to override in the base state dictionary.
+    
+    Returns:
+    	dict: A dictionary containing operator state data for export packet testing.
+    """
     state = {
         "provider_state": "export_ready",
         "checkpoint": "approved",
@@ -189,6 +198,12 @@ def test_export_root_falls_back_to_outputs_when_no_env(monkeypatch) -> None:
     original_exists = Path.exists
 
     def patched_exists(self):
+        """
+        Custom exists check that treats "/data" as non-existent.
+        
+        Returns:
+        	False if the path is "/data", otherwise the original exists check result.
+        """
         if str(self) == "/data":
             return False
         return original_exists(self)

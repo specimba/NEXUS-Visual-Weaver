@@ -9,9 +9,15 @@ class FakeLoraPipe:
         self.unloaded = False
 
     def load_lora_weights(self, repo_id: str, **kwargs) -> None:
+        """
+        Record a call to load LoRA weights for later assertion in tests.
+        """
         self.loaded.append((repo_id, kwargs))
 
     def set_adapters(self, adapter_names: list[str], adapter_weights: list[float]) -> None:
+        """
+        Store adapter names and their corresponding weights for later inspection.
+        """
         self.adapters = (adapter_names, adapter_weights)
 
     def unload_lora_weights(self) -> None:
