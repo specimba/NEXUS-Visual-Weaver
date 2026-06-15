@@ -1,69 +1,60 @@
+```
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
-.pytest_cache/
-pytest-cache-files-*/
-.mypy_cache/
-.ruff_cache/
-.coverage
-.coverage.*
-htmlcov/
-.tox/
-.nox/
-
-# Packaging/build artifacts
+*.so
+.Python
 build/
+develop-eggs/
 dist/
-*.egg-info/
+downloads/
+eggs/
 .eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
 *.egg
 MANIFEST
 
-# Virtual environments
-.venv/
-venv/
+# Virtual Environment
 env/
+venv/
 ENV/
-env.bak/
-venv.bak/
-
-# Local secrets and credentials
+.venv/
 .env
-.env.*
-!.env.example
-.envrc
-*.pem
-*.key
-*.p12
-*.pfx
-.huggingface/
-.cache/huggingface/
-.hf-upload-cache/
-.modal.toml
-.netrc
-.pypirc
 
-# App/runtime outputs
-.gradio/
-.playwright-mcp/
-server*.log
+# IDE
+.vscode/
+.idea/
+
+# Logs
 *.log
-outputs/
-nexus-visual-weaver-command-center*.png
+logs/
 
-# Codex/local tool state
-.codex-home/
-outputs/moodboards/*/.codex-home/
-
-# Notebooks/docs build
-.ipynb_checkpoints/
-docs/_build/
-site/
-
-# OS/editor noise
+# OS
 .DS_Store
 Thumbs.db
-.idea/
-.vscode/
-tempCodeRunnerFile.py
+
+# Testing
+.coverage
+htmlcov/
+.coverage.*
+.cache
+.pytest_cache/
+.hypothesis/
+
+# Security
+ops_audit/build_logs.txt
+ops_audit/run_logs.txt
+
+# Modal
+.modal/
+modal_storage/
+
+```

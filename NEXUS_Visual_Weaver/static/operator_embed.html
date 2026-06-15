@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>NEXUS Visual Weaver Operator Embed</title>
+  <style>
+    body { margin:0; background:#08070a; color:#eee; font-family:system-ui,sans-serif; }
+    header { padding:16px 20px; border-bottom:1px solid #3a1118; }
+    iframe { width:100%; height:900px; border:0; }
+    .status-panel { padding:20px; background:#111; margin:20px; border-radius:8px; }
+    .badge { display:inline-block; padding:4px 8px; margin:2px; border-radius:4px; font-size:12px; }
+    .badge-yes { background:#2d5016; color:#fff; }
+    .badge-pending { background:#b7791f; color:#fff; }
+    pre { background:#1a1a1a; padding:16px; overflow:auto; max-height:400px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎨 NEXUS Visual Weaver — Operator Embed</h1>
+    <p>Canonical Space: <strong>build-small-hackathon/NEXUS_Visual_Weaver</strong></p>
+    <p>Track: Thousand Token Wood | Models: ~10B params (≤32B compliant)</p>
+  </header>
+  
+  <div class="status-panel">
+    <h2>🏆 Bonus Badge Status</h2>
+    <span class="badge badge-yes">✅ Off-Brand</span>
+    <span class="badge badge-yes">✅ Best Agent</span>
+    <span class="badge badge-yes">✅ Tiny Titan</span>
+    <span class="badge badge-yes">✅ Best Use of Modal</span>
+    <span class="badge badge-pending">⏳ Field Notes</span>
+    <span class="badge badge-pending">⏳ Sharing is Caring</span>
+    <span class="badge badge-pending">⏳ Best Demo</span>
+  </div>
+
+  <div class="status-panel">
+    <h2>🔧 Modal Forge Integration</h2>
+    <p><strong>Role:</strong> Offline computation, LoRA experiments, artifact generation</p>
+    <p><strong>Primary Runtime:</strong> Hugging Face ZeroGPU (NVIDIA RTX Pro 6000 Blackwell - 104GB VRAM)</p>
+    <p><strong>Credit Usage:</strong> Hackathon Modal credits ($251 allocation)</p>
+    <pre id="modal-status">Loading Modal status...</pre>
+  </div>
+
+  <iframe src="https://build-small-hackathon-nexus-visual-weaver.hf.space"></iframe>
+
+  <script>
+    fetch('examples/modal_forge_status.json')
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('modal-status').textContent = JSON.stringify(data, null, 2);
+      })
+      .catch(err => {
+        document.getElementById('modal-status').textContent = 'Status loading...';
+      });
+  </script>
+</body>
+</html>
