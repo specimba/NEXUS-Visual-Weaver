@@ -186,6 +186,7 @@ def write_export_packet(
         "nemotron": nemotron_evidence.get("status"),
         "operator": operator_state.get("provider_state"),
     }
+    override_reason = _safe_dict(operator_state.get("st3gg_override_reason", ""))
     packet = {
         "schema": "nexus_visual_weaver.export_packet.v1",
         "run_id": run_id,
@@ -206,6 +207,10 @@ def write_export_packet(
         "st3gg_verdict": {
             "status": st3gg_scan.get("status"),
             "export_gate": st3gg_scan.get("export_gate"),
+        },
+        "st3gg_override": {
+            "used": bool(override_reason),
+            "reason": override_reason,
         },
         "st3gg_scan": st3gg_scan,
         "minicpm_judge": minicpm_judge,

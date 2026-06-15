@@ -251,3 +251,35 @@ def test_checkpoint_blocks_without_generated_artifact() -> None:
 
     assert blocked[13]["provider_state"] == "blocked"
     assert "no generated artifact" in blocked[13]["message"].lower()
+
+
+def test_export_packet_allows_blocked_st3gg_with_explicit_override(monkeypatch) -> None:
+    monkeypatch.setenv("NEXUS_EXPORT_DIR", "outputs/test-exports")
+    run = build_command_center_run("gothic patent leather platform boots")
+    blocked_scan = {
+        "status": "review",
+        "export_gate": "blocked",
+        "findings": ["metadata review"],
+        "purification_actions": ["strip metadata"],
+    }
+    state = {
+        **app._default_operator_state(),
+        "checkpoint": "approved",
+        "provider_state": "generated",
+        "generated_scan": blocked_scan,
+        "generation": {
+            "status": "success",
+            "provider_state": "generated",
+            "output_path": "outputs/runtime/nexus_flux_test.png",
+            "lora_status": "skipped_incompatible",
+        },
+    }
+
+    blocked = app.export_packet(run, False, blocked_scan, "Forge", state, "")
+    assert blocked[13]["provider_state"] == "blocked"
+    assert "override reason" in blocked[13]["message"].lower()
+
+    exported = app.export_packet(run, False, blocked_scan, "Forge", state, "Operator reviewed ST3GG and wrote audit evidence only.")
+    assert exported[13]["provider_state"] == "exported"
+    assert exported[13]["export"] == "override"
+    assert "export_packet" in exported[13]

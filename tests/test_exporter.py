@@ -269,3 +269,22 @@ def test_export_packet_redacts_raw_payload_paths_and_secret_like_values(monkeypa
     assert "C:/Users/speci.000/Downloads" not in serialized
     assert payload["st3gg_verdict"] == {"status": "review", "export_gate": "blocked"}
     assert payload["provider_states"]["minicpm"] == "failed"
+
+
+def test_export_packet_records_st3gg_override_reason(monkeypatch) -> None:
+    monkeypatch.setenv("NEXUS_EXPORT_DIR", "outputs/test-exports")
+    run = build_command_center_run("gothic patent leather platform boots")
+    scan = {"status": "review", "export_gate": "blocked", "findings": ["metadata review"], "purification_actions": ["strip metadata"]}
+    state = _make_base_state(
+        st3gg_override_reason="Operator reviewed the ST3GG findings and is writing an audit packet only.",
+        export="override",
+    )
+
+    result = write_export_packet(run=run, scan=scan, operator_state=state, adult_mode=False)
+    payload = json.loads(Path(result["path"]).read_text(encoding="utf-8"))
+
+    assert payload["st3gg_verdict"] == {"status": "review", "export_gate": "blocked"}
+    assert payload["st3gg_override"] == {
+        "used": True,
+        "reason": "Operator reviewed the ST3GG findings and is writing an audit packet only.",
+    }
