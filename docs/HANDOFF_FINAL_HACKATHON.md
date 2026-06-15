@@ -3,10 +3,14 @@
 ## Current Target
 
 - GitHub repo: `https://github.com/specimba/NEXUS-Visual-Weaver`
-- Working branch: `codex/specimba/ui-polish-command-center`
+- Working branch: `main`
 - HF Space: `build-small-hackathon/NEXUS_Visual_Weaver`
 - Public Space URL: `https://build-small-hackathon-nexus-visual-weaver-a107340.hf.space/`
 - HF rollback SHA: `410a467c55d11e7308249198bd5fe0b2c190aec6`.
+- Stable rollback tag: `stable-raven-quality-20260615` -> `aa37d4d`.
+- Last verified code commit: `aa37d4d` (`fix: load flux2 klein pipeline`).
+- Last verified HF Space commit: `effbdb4c6a1ea98410165310caea10097ffa0ca6`.
+- Last verified HF runtime: `RUNNING`, ZeroGPU, dev mode disabled, `/data` bucket mounted.
 - Branch discipline: use only `main` and `codex/specimba/ui-polish-command-center`; no extra recovery branches.
 - Primary goal: finish a countable Build Small submission with Raven Quality Stack generation, ST3GG scan, LocateAnything grounding, optional OpenBMB MiniCPM-V judge evidence, optional NVIDIA Nemotron evidence, optional Modal VOID sidecar evidence, checkpointed export packet, README prize mapping, demo video, and social post.
 
@@ -30,12 +34,12 @@ python -m compileall app.py src tests
 $env:NEXUS_DISABLE_REAL_HF='1'
 python -c "import app; print('app import ok')"
 $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
-python -m pytest -q tests -p no:cacheprovider
+python -m pytest -q tests -p no:cacheprovider --basetemp=C:\tmp\pytest-nvw-full
 hf auth whoami --format json
 hf spaces info build-small-hackathon/NEXUS_Visual_Weaver --format json
 ```
 
-Avoid pytest `--basetemp=C:\tmp` in this Windows sandbox if `tmp_path` fixtures fail with `PermissionError`. The current tests avoid `tmp_path`.
+If local proxy settings cause HF CLI connection refusal, use a no-proxy Python `urllib` probe with the cached local HF token. Do not print the token.
 
 ## HF Space Log Observation
 
@@ -57,6 +61,7 @@ Current evidence from the SSE API:
 
 - `logs/run` returns HTTP 200 and shows the Gradio/MCP startup stream.
 - `logs/build` returns HTTP 200 and shows Build Queued for Space commit `dc6756e`.
+- During the final sprint, HF CLI logs hit local Windows proxy/Unicode issues. Public no-proxy probes verified root HTTP 200 and `/gradio_api/info` callback exposure.
 
 ## Runtime Flow
 
@@ -84,6 +89,18 @@ Current evidence from the SSE API:
 - Real FLUX generation depends on Space GPU availability and gated 9B access; the 4B sidecar exists to keep the demo useful without mislabeling the flagship lane.
 - OpenBMB and Nemotron endpoints are optional and must show `missing secret` rather than fake success when not configured.
 - Demo video and social post links must be added before final submission.
+- Dev mode served stale `dc6756e` until disabled through the HF API. Keep dev mode off for final judging unless you immediately verify `/config` after re-enabling.
+
+## Last Verified Checks
+
+- Local compile: `python -m compileall app.py src tests` passed.
+- Local import: `NEXUS_DISABLE_REAL_HF=1 python -c "import app; print('app import ok')"` passed.
+- Local tests: `123 passed, 1 warning`.
+- Secret scan: no `hf_`, `Bearer`, `sk-`, or obvious API-key literals in tracked files.
+- Public Space: root HTTP 200.
+- Public Space API: `/gradio_api/info` exposed `run_active_weave`, `scan_reference`, `approve_checkpoint`, `prepare_export_packet`, and `toggle_adult_catalog`.
+- Public Space config: `Raven Quality Stack` and `FLUX.2 9B PINNED` present; old `Dark Couture v2.4` and `FLUX.2 4B PINNED` absent.
+- Live weave: real FLUX image generated after switching to `Flux2KleinPipeline`; ST3GG marked the generated PNG `review` and blocked export due high entropy review, proving the export gate is active.
 
 ## Last-Step Checklist
 
