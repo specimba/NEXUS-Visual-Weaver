@@ -1,9 +1,13 @@
 from PIL import Image
+from pathlib import Path
+import types
 
+import nexus_visual_weaver.hf_runtime as hf_runtime
 from nexus_visual_weaver.hf_runtime import (
     FLUX_REPO_ID,
     PRIVATE_RESEARCH_FLUX_REPO_ID,
     TINY_TITAN_FLUX_REPO_ID,
+    _PIPELINE_CACHE,
     _adapter_recipe,
     _repo_candidates,
     active_flux_repo_id,
@@ -12,6 +16,9 @@ from nexus_visual_weaver.hf_runtime import (
     hf_runtime_enabled,
 )
 from nexus_visual_weaver.render import render_artifact_lane
+
+
+RUNTIME_FIXTURE_DIR = Path("tests/fixtures/runtime")
 
 
 def test_hf_runtime_is_disabled_locally_by_default(monkeypatch) -> None:
@@ -209,3 +216,65 @@ def test_default_lora_repo_id_excludes_requires_image_adapters() -> None:
     recipe_result = _adapter_recipe(result)
     assert recipe_result is not None
     assert recipe_result.requires_image is False
+
+
+def test_generate_flux_image_reports_sidecar_fallback(monkeypatch) -> None:
+    class FakeCuda:
+        @staticmethod
+        def is_available() -> bool:
+            return True
+
+    class FakeGenerator:
+        def __init__(self, device):
+            self.device = device
+
+        def manual_seed(self, seed):
+            self.seed = seed
+            return self
+
+    fake_torch = types.SimpleNamespace(cuda=FakeCuda(), bfloat16="bfloat16", Generator=FakeGenerator)
+
+    class FakePipeline:
+        @classmethod
+        def from_pretrained(cls, repo_id, torch_dtype=None, token=None):
+            if repo_id == FLUX_REPO_ID:
+                raise RuntimeError("primary denied")
+            return cls(repo_id)
+
+        def __init__(self, repo_id):
+            self.repo_id = repo_id
+
+        def enable_model_cpu_offload(self):
+            return None
+
+        def set_progress_bar_config(self, disable):
+            self.progress_disabled = disable
+
+        def __call__(self, **kwargs):
+            return types.SimpleNamespace(images=[Image.new("RGB", (8, 8), color=(2, 4, 6))])
+
+    fake_diffusers = types.SimpleNamespace(Flux2KleinPipeline=FakePipeline)
+    monkeypatch.setitem(__import__("sys").modules, "torch", fake_torch)
+    monkeypatch.setitem(__import__("sys").modules, "diffusers", fake_diffusers)
+    monkeypatch.setenv("NEXUS_ENABLE_REAL_HF", "1")
+    monkeypatch.delenv("NEXUS_DISABLE_REAL_HF", raising=False)
+    monkeypatch.delenv("NEXUS_DISABLE_TINY_TITAN_FALLBACK", raising=False)
+    output_dir = RUNTIME_FIXTURE_DIR / "hf-output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("NEXUS_OUTPUT_DIR", str(output_dir))
+    monkeypatch.setattr(hf_runtime, "load_and_apply", lambda pipe, recipe, repo_id, adult_mode=False: {"status": "disabled", "repo_id": None, "message": "fake"})
+    monkeypatch.setattr(hf_runtime, "unload_all", lambda pipe: None)
+    _PIPELINE_CACHE.clear()
+
+    try:
+        result = generate_flux_image("prompt", seed=7)
+    finally:
+        for artifact in output_dir.glob("nexus_flux_*_7.png"):
+            artifact.unlink(missing_ok=True)
+
+    assert result.status == "success"
+    assert result.repo_id == TINY_TITAN_FLUX_REPO_ID
+    assert result.fallback_used is True
+    assert result.primary_error is not None
+    assert "primary denied" in result.primary_error
+    assert result.output_path is not None

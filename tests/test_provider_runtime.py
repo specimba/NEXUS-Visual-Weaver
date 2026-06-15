@@ -1,4 +1,5 @@
 from PIL import Image
+from pathlib import Path
 
 from nexus_visual_weaver.provider_runtime import (
     NEMOTRON_NANO_REPO_ID,
@@ -9,10 +10,19 @@ from nexus_visual_weaver.provider_runtime import (
     _image_data_url,
     _post_json,
     _safe_json_from_text,
+    _safe_provider_payload,
     _short_error,
     judge_with_minicpm,
     judge_with_nemotron,
 )
+
+
+RUNTIME_FIXTURE_DIR = Path("tests/fixtures/runtime")
+
+
+def _runtime_fixture_path(name: str) -> Path:
+    RUNTIME_FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
+    return RUNTIME_FIXTURE_DIR / name
 
 
 def test_minicpm_reports_missing_secret(monkeypatch) -> None:
@@ -48,7 +58,7 @@ def test_minicpm_blocks_when_artifact_missing(monkeypatch) -> None:
 
 
 def test_minicpm_success_with_mocked_post(monkeypatch) -> None:
-    image = "outputs/test-provider-artifact.png"
+    image = _runtime_fixture_path("test-provider-artifact.png")
     Image.new("RGB", (8, 8), color=(12, 16, 20)).save(image)
     monkeypatch.setenv("MINICPM_BASE_URL", "http://example.test")
     monkeypatch.setenv("MINICPM_API_KEY", "test-token")
@@ -61,12 +71,15 @@ def test_minicpm_success_with_mocked_post(monkeypatch) -> None:
 
     monkeypatch.setattr("nexus_visual_weaver.provider_runtime._post_json", fake_post)
 
-    result = judge_with_minicpm(
-        prompt="gothic couture",
-        image_path=image,
-        scan={"export_gate": "clear"},
-        wardrobe_summary="boots and lace",
-    )
+    try:
+        result = judge_with_minicpm(
+            prompt="gothic couture",
+            image_path=str(image),
+            scan={"export_gate": "clear"},
+            wardrobe_summary="boots and lace",
+        )
+    finally:
+        image.unlink(missing_ok=True)
 
     assert result.status == "success"
     assert result.evidence["overall_status"] == "pass"
@@ -119,23 +132,50 @@ def test_image_data_url_returns_none_for_missing_file() -> None:
 
 
 def test_image_data_url_encodes_png_as_base64() -> None:
-    image_path = "outputs/test-img-data-url.png"
+    image_path = _runtime_fixture_path("test-img-data-url.png")
     Image.new("RGB", (4, 4), color=(0, 0, 0)).save(image_path)
 
-    result = _image_data_url(image_path)
+    try:
+        result = _image_data_url(str(image_path))
+    finally:
+        image_path.unlink(missing_ok=True)
 
     assert result is not None
     assert result.startswith("data:image/png;base64,")
 
 
 def test_image_data_url_uses_jpeg_mime_for_jpg() -> None:
-    image_path = "outputs/test-img-data-url.jpg"
+    image_path = _runtime_fixture_path("test-img-data-url.jpg")
     Image.new("RGB", (4, 4), color=(0, 0, 0)).save(image_path)
 
-    result = _image_data_url(image_path)
+    try:
+        result = _image_data_url(str(image_path))
+    finally:
+        image_path.unlink(missing_ok=True)
 
     assert result is not None
     assert result.startswith("data:image/jpeg;base64,")
+
+
+def test_image_data_url_rejects_unknown_suffix() -> None:
+    image_path = _runtime_fixture_path("not-an-image.txt")
+    image_path.write_text("not an image", encoding="utf-8")
+
+    try:
+        assert _image_data_url(str(image_path)) is None
+    finally:
+        image_path.unlink(missing_ok=True)
+
+
+def test_image_data_url_rejects_oversized_file(monkeypatch) -> None:
+    image_path = _runtime_fixture_path("large.png")
+    image_path.write_bytes(b"not actually decoded because size fails")
+    monkeypatch.setattr("nexus_visual_weaver.provider_runtime.MAX_PROVIDER_IMAGE_BYTES", 4)
+
+    try:
+        assert _image_data_url(str(image_path)) is None
+    finally:
+        image_path.unlink(missing_ok=True)
 
 
 # --- _extract_content tests ---
@@ -263,7 +303,7 @@ def test_nemotron_failed_api_call_returns_failed_status(monkeypatch) -> None:
 def test_minicpm_failed_api_call_returns_failed_status(monkeypatch) -> None:
     import urllib.error
 
-    image_path = "outputs/test-minicpm-fail.png"
+    image_path = _runtime_fixture_path("test-minicpm-fail.png")
     Image.new("RGB", (4, 4), color=(0, 0, 0)).save(image_path)
     monkeypatch.setenv("MINICPM_BASE_URL", "http://minicpm.test")
     monkeypatch.setenv("MINICPM_API_KEY", "test-token")
@@ -273,12 +313,15 @@ def test_minicpm_failed_api_call_returns_failed_status(monkeypatch) -> None:
 
     monkeypatch.setattr("nexus_visual_weaver.provider_runtime._post_json", fake_post)
 
-    result = judge_with_minicpm(
-        prompt="gothic couture",
-        image_path=image_path,
-        scan={"export_gate": "clear"},
-        wardrobe_summary="platform boots",
-    )
+    try:
+        result = judge_with_minicpm(
+            prompt="gothic couture",
+            image_path=str(image_path),
+            scan={"export_gate": "clear"},
+            wardrobe_summary="platform boots",
+        )
+    finally:
+        image_path.unlink(missing_ok=True)
 
     assert result.status == "failed"
     assert result.provider_state == "failed"
@@ -321,7 +364,7 @@ def test_minicpm_uses_openbmb_api_key_as_fallback(monkeypatch) -> None:
     monkeypatch.delenv("MINICPM_API_KEY", raising=False)
     monkeypatch.setenv("OPENBMB_API_KEY", "openbmb-fallback-token")
 
-    image_path = "outputs/test-openbmb-key.png"
+    image_path = _runtime_fixture_path("test-openbmb-key.png")
     Image.new("RGB", (4, 4), color=(0, 0, 0)).save(image_path)
 
     captured = {}
@@ -332,12 +375,15 @@ def test_minicpm_uses_openbmb_api_key_as_fallback(monkeypatch) -> None:
 
     monkeypatch.setattr("nexus_visual_weaver.provider_runtime._post_json", fake_post)
 
-    result = judge_with_minicpm(
-        prompt="test",
-        image_path=image_path,
-        scan={},
-        wardrobe_summary="",
-    )
+    try:
+        result = judge_with_minicpm(
+            prompt="test",
+            image_path=str(image_path),
+            scan={},
+            wardrobe_summary="",
+        )
+    finally:
+        image_path.unlink(missing_ok=True)
 
     assert result.status == "success"
     assert captured["token"] == "openbmb-fallback-token"
@@ -362,6 +408,47 @@ def test_nemotron_uses_nvidia_api_key_as_fallback(monkeypatch) -> None:
     assert captured["token"] == "nvidia-fallback-token"
 
 
+def test_safe_provider_payload_redacts_sensitive_nested_keys() -> None:
+    result = _safe_provider_payload(
+        {
+            "checkpoint": "ok",
+            "HF_TOKEN": "should-not-leak",
+            "nested": {"raw_payload": "hidden", "items": [{"base64_image": "hidden"}, {"safe": "visible"}]},
+        }
+    )
+
+    assert result["checkpoint"] == "ok"
+    assert result["HF_TOKEN"] == "[redacted]"
+    assert result["nested"]["raw_payload"] == "[redacted]"
+    assert result["nested"]["items"][0]["base64_image"] == "[redacted]"
+    assert result["nested"]["items"][1]["safe"] == "visible"
+
+
+def test_nemotron_redacts_run_packet_before_provider_call(monkeypatch) -> None:
+    monkeypatch.setenv("NEMOTRON_BASE_URL", "http://localhost:8001")
+    monkeypatch.setenv("NEMOTRON_API_KEY", "nvidia-token")
+    captured = {}
+
+    def fake_post(url, token, payload, timeout):
+        captured["content"] = payload["messages"][0]["content"]
+        return {"choices": [{"message": {"content": '{"final_claim_status":"pass"}'}}]}
+
+    monkeypatch.setattr("nexus_visual_weaver.provider_runtime._post_json", fake_post)
+
+    result = judge_with_nemotron(
+        prompt="brief",
+        run_packet={"safe": "visible", "api_key": "hidden-key", "nested": {"payload_bytes": "hidden-bytes"}},
+        minicpm_result={"status": "success", "authorization": "hidden-auth"},
+    )
+
+    assert result.status == "success"
+    assert "visible" in captured["content"]
+    assert "hidden-key" not in captured["content"]
+    assert "hidden-bytes" not in captured["content"]
+    assert "hidden-auth" not in captured["content"]
+    assert "[redacted]" in captured["content"]
+
+
 def test_post_json_rejects_unsupported_url_schemes_before_urlopen(monkeypatch) -> None:
     called = False
 
@@ -381,3 +468,44 @@ def test_post_json_rejects_unsupported_url_schemes_before_urlopen(monkeypatch) -
             raise AssertionError(f"{url} should have been rejected")
 
     assert called is False
+
+
+def test_post_json_rejects_plain_http_non_loopback_before_urlopen(monkeypatch) -> None:
+    called = False
+
+    def fake_urlopen(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("urlopen should not be called for plaintext remote provider URLs")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    try:
+        _post_json("http://example.test/v1/chat/completions", "token", {"ok": True}, 1.0)
+    except ValueError as exc:
+        assert "HTTPS" in str(exc)
+        assert "loopback" in str(exc)
+    else:
+        raise AssertionError("remote http provider URL should have been rejected")
+
+    assert called is False
+
+
+def test_post_json_allows_loopback_http_for_local_tests(monkeypatch) -> None:
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b'{"ok": true}'
+
+    def fake_urlopen(request, timeout):
+        assert request.full_url == "http://127.0.0.1:8000/v1/chat/completions"
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    assert _post_json("http://127.0.0.1:8000/v1/chat/completions", "token", {"ok": True}, 1.0) == {"ok": True}

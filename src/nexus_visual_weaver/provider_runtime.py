@@ -17,6 +17,14 @@ from typing import Any
 OPENBMB_REPO_ID = "openbmb/MiniCPM-V-4.6"
 NEMOTRON_PARSE_REPO_ID = "nvidia/NVIDIA-Nemotron-Parse-v1.2"
 NEMOTRON_NANO_REPO_ID = "nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF"
+MAX_PROVIDER_IMAGE_BYTES = 10 * 1024 * 1024
+IMAGE_MIME_BY_SUFFIX = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+SENSITIVE_PROVIDER_KEYS = ("token", "secret", "api_key", "authorization", "payload", "raw", "base64", "bytes")
 
 
 @dataclass(frozen=True)
@@ -67,11 +75,34 @@ def _image_data_url(path: str | None) -> str | None:
         if not target.exists() or not target.is_file():
             return None
         suffix = target.suffix.lower()
-        mime = "image/png" if suffix == ".png" else "image/jpeg" if suffix in {".jpg", ".jpeg"} else "image/webp"
+        mime = IMAGE_MIME_BY_SUFFIX.get(suffix)
+        if mime is None or target.stat().st_size > MAX_PROVIDER_IMAGE_BYTES:
+            return None
         data = base64.b64encode(target.read_bytes()).decode("ascii")
         return f"data:{mime};base64,{data}"
     except OSError:
         return None
+
+
+def _is_loopback_host(hostname: str | None) -> bool:
+    return hostname in {"localhost", "127.0.0.1", "::1"}
+
+
+def _safe_provider_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            normalized = str(key).lower()
+            if any(marker in normalized for marker in SENSITIVE_PROVIDER_KEYS):
+                redacted[str(key)] = "[redacted]"
+            else:
+                redacted[str(key)] = _safe_provider_payload(item)
+        return redacted
+    if isinstance(value, list):
+        return [_safe_provider_payload(item) for item in value]
+    if isinstance(value, tuple):
+        return [_safe_provider_payload(item) for item in value]
+    return value
 
 
 def _post_json(url: str, token: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
@@ -91,6 +122,8 @@ def _post_json(url: str, token: str, payload: dict[str, Any], timeout: float) ->
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError(f"Invalid URL: expected http(s) URL with host, got {url!r}.")
+    if parsed.scheme == "http" and not _is_loopback_host(parsed.hostname):
+        raise ValueError("Provider URLs must use HTTPS unless targeting loopback development hosts.")
     body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         url,
@@ -287,12 +320,14 @@ def judge_with_nemotron(
         "Return strict JSON only with keys: sponsor_model_used, structured_parse, "
         "risk_notes, parameter_budget_notes, final_claim_status. Parse this visual creation run."
     )
+    safe_run_packet = _safe_provider_payload(run_packet)
+    safe_minicpm_result = _safe_provider_payload(minicpm_result or {})
     payload = {
         "model": model,
         "messages": [
             {
                 "role": "user",
-                "content": f"{instruction}\nPrompt: {prompt}\nRun: {json.dumps(run_packet, ensure_ascii=True)[:6000]}\nMiniCPM: {json.dumps(minicpm_result or {}, ensure_ascii=True)[:2500]}",
+                "content": f"{instruction}\nPrompt: {prompt}\nRun: {json.dumps(safe_run_packet, ensure_ascii=True)[:6000]}\nMiniCPM: {json.dumps(safe_minicpm_result, ensure_ascii=True)[:2500]}",
             }
         ],
         "temperature": 0.1,
