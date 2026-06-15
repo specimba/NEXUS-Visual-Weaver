@@ -154,6 +154,56 @@ def render_trust_strip(scan: dict | None = None, operator_state: dict | None = N
     """
 
 
+def _submission_link_ready() -> bool:
+    return bool(os.environ.get("NEXUS_DEMO_VIDEO_URL") and os.environ.get("NEXUS_SOCIAL_POST_URL"))
+
+
+def _submission_readiness(scan: dict | None = None, operator_state: dict | None = None) -> tuple[int, int, list[tuple[str, bool, str]]]:
+    scan = scan or {"status": "idle", "export_gate": "pending"}
+    operator_state = operator_state or {}
+    generation = operator_state.get("generation") or {}
+    minicpm = operator_state.get("minicpm_judge") or {}
+    nemotron = operator_state.get("nemotron_evidence") or {}
+    gates = [
+        ("Space/API", True, "Space is serving the command center and MCP/Gradio API."),
+        ("Raven Stack", True, "28.50B quality stack is configured under the 32B rule."),
+        ("ST3GG Visible", True, "Trust strip and export gate are above the fold."),
+        ("FLUX Artifact", generation.get("status") == "success", "Run Active Weave must generate a real artifact."),
+        ("Checkpoint", operator_state.get("checkpoint") == "approved", "Human checkpoint must approve the generated artifact."),
+        ("Export Packet", bool(operator_state.get("export_packet")), "Prepare Export Packet must write evidence JSON."),
+        (
+            "Sponsor Evidence",
+            minicpm.get("status") == "success" and nemotron.get("status") == "success",
+            "MiniCPM and Nemotron both need configured secrets and successful calls.",
+        ),
+        ("Demo/Social", _submission_link_ready(), "Final demo video and social post URLs are still required."),
+    ]
+    complete = sum(1 for _, ok, _ in gates if ok)
+    return complete, len(gates), gates
+
+
+def render_submission_readiness(scan: dict | None = None, operator_state: dict | None = None) -> str:
+    complete, total, gates = _submission_readiness(scan, operator_state)
+    pct = int((complete / total) * 100)
+    chips = "".join(
+        f'<span class="nw-ready-chip {"is-done" if ok else "is-waiting"}">{escape(label)}</span>'
+        for label, ok, _ in gates
+    )
+    blockers = [help_text for _, ok, help_text in gates if not ok][:3]
+    blockers_html = " ".join(f"<span>{escape(text)}</span>" for text in blockers)
+    return f"""
+    <section class="nw-readiness">
+      <div class="nw-ready-head">
+        <strong>Hackathon Readiness</strong>
+        <small>{complete}/{total} gates complete</small>
+      </div>
+      <div class="nw-ready-meter"><i style="width:{pct}%"></i></div>
+      <div class="nw-ready-chips">{chips}</div>
+      <div class="nw-ready-blockers">{blockers_html}</div>
+    </section>
+    """
+
+
 def render_topbar(
     adult_mode: bool = False,
     relay_status: dict | None = None,
@@ -197,6 +247,7 @@ def render_topbar(
       <div class="nw-locked"><b>18+</b><span>Locked. Enable in Security with explicit justification.</span></div>
     </div>
     {render_trust_strip(scan, operator_state)}
+    {render_submission_readiness(scan, operator_state)}
     """
 
 

@@ -413,25 +413,36 @@ def export_packet(
     scan: dict[str, Any] | None,
     active_section: str,
     operator_state: dict[str, Any] | None,
+    override_reason: str = "",
 ) -> tuple[Any, ...]:
     state = operator_state or _default_operator_state()
     scan = _authoritative_generated_scan(state)
+    override_reason = (override_reason or "").strip()
     if run is None:
         next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export blocked: no active run packet exists."}
     elif state.get("checkpoint") != "approved":
         next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export blocked: human checkpoint has not been approved."}
     elif not _generated_output_path(state):
         next_state = {**state, "provider_state": "blocked", "export": "blocked", "message": "Export blocked: no generated artifact exists."}
-    elif scan.get("export_gate") != "clear":
-        next_state = {**state, "provider_state": "blocked", "export": scan.get("export_gate", "blocked"), "message": "Export blocked: ST3GG gate is not clear."}
+    elif scan.get("export_gate") != "clear" and not override_reason:
+        next_state = {**state, "provider_state": "blocked", "export": scan.get("export_gate", "blocked"), "message": "Export blocked: ST3GG gate is not clear. Add an explicit override reason to prepare a reviewed evidence packet."}
     else:
-        export = write_export_packet(run=run, scan=scan, operator_state=state, adult_mode=adult_mode)
-        next_state = {
+        export_state = "clear" if scan.get("export_gate") == "clear" else "override"
+        export_input_state = {
             **state,
+            **({"st3gg_override_reason": override_reason} if override_reason and scan.get("export_gate") != "clear" else {}),
+        }
+        export = write_export_packet(run=run, scan=scan, operator_state=export_input_state, adult_mode=adult_mode)
+        next_state = {
+            **export_input_state,
             "provider_state": "exported",
-            "export": "clear",
+            "export": export_state,
             "export_packet": {"path": export["path"]},
-            "message": f"Governed export packet prepared: {export['path']}",
+            "message": (
+                f"Governed export packet prepared with ST3GG override recorded: {export['path']}"
+                if export_state == "override"
+                else f"Governed export packet prepared: {export['path']}"
+            ),
         }
     return _render_stateful(run, adult_mode, scan, active_section, next_state)
 
@@ -525,6 +536,13 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
             )
             run_btn = gr.Button("Run Active Weave", variant="primary", scale=1)
             stop_btn = gr.Button("Stop Provider Job", variant="stop", interactive=False, scale=1)
+        override_reason = gr.Textbox(
+            value="",
+            label="ST3GG Override Reason",
+            placeholder="Required only to export a reviewed/blocked artifact. Explain why the evidence packet may be written.",
+            lines=2,
+            max_lines=3,
+        )
         with gr.Row(elem_id="nw-operator-actions", elem_classes=["nw-operator-actions"]):
             scan_btn = gr.Button("Scan Reference", scale=1)
             checkpoint_btn = gr.Button("Approve Checkpoint", scale=1)
@@ -627,7 +645,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
     )
     export_btn.click(
         fn=export_packet,
-        inputs=[active_run_state, adult_mode, scan_state, section_nav, operator_state],
+        inputs=[active_run_state, adult_mode, scan_state, section_nav, operator_state, override_reason],
         outputs=operator_outputs,
         api_name="prepare_export_packet",
     )

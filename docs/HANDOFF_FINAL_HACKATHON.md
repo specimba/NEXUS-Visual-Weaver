@@ -18,6 +18,7 @@
 
 Do not paste these into chat, commits, logs, or export packets.
 
+- Current Space secret inventory checked after the Raven sprint: `HF_TOKEN` is present; OpenBMB, Nemotron/NVIDIA, and Modal secrets are not present.
 - `HF_TOKEN`: required for gated FLUX.2 Klein 9B access after license acceptance; the app can honestly fall back to the 4B Tiny Titan sidecar if the 9B lane is unavailable.
 - `MINICPM_BASE_URL`: OpenBMB OpenAI-compatible endpoint base URL.
 - `MINICPM_API_KEY`: OpenBMB bearer token.
@@ -90,6 +91,7 @@ Current evidence from the SSE API:
 - OpenBMB and Nemotron endpoints are optional and must show `missing secret` rather than fake success when not configured.
 - Demo video and social post links must be added before final submission.
 - Dev mode served stale `dc6756e` until disabled through the HF API. Keep dev mode off for final judging unless you immediately verify `/config` after re-enabling.
+- The app now supports an explicit ST3GG override reason for evidence-packet export when a generated artifact is review/blocked. This does not mark ST3GG as clear; it records the blocked gate and the human reason.
 
 ## Last Verified Checks
 
@@ -101,6 +103,8 @@ Current evidence from the SSE API:
 - Public Space API: `/gradio_api/info` exposed `run_active_weave`, `scan_reference`, `approve_checkpoint`, `prepare_export_packet`, and `toggle_adult_catalog`.
 - Public Space config: `Raven Quality Stack` and `FLUX.2 9B PINNED` present; old `Dark Couture v2.4` and `FLUX.2 4B PINNED` absent.
 - Live weave: real FLUX image generated after switching to `Flux2KleinPipeline`; ST3GG marked the generated PNG `review` and blocked export due high entropy review, proving the export gate is active.
+- Readiness: the UI now shows explicit gates for Space/API, Raven Stack, ST3GG, FLUX artifact, checkpoint, export packet, sponsor evidence, and demo/social.
+- Submission assets: see `docs/SUBMISSION_ASSETS.md` for demo script, social draft, thumbnail direction, and final link checklist.
 
 ## Last-Step Checklist
 

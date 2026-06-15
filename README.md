@@ -111,6 +111,8 @@ The default preset is **Raven Quality Stack**. `black-forest-labs/FLUX.2-klein-4
 
 Tiny Titan is not the flagship story. It can be claimed only from a successful sidecar export packet where every active sidecar model is <=4B.
 
+See [docs/SUBMISSION_ASSETS.md](docs/SUBMISSION_ASSETS.md) for the demo script, social post draft, thumbnail direction, and final link checklist.
+
 ## Local Setup
 
 ```powershell

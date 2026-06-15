@@ -20,6 +20,7 @@ from nexus_visual_weaver.render import (
     render_inspector,
     render_operations_panel,
     render_provider_cards,
+    render_submission_readiness,
     render_topbar,
     render_trust_strip,
 )
@@ -315,6 +316,8 @@ def test_render_topbar_includes_trust_strip() -> None:
 
     assert "TRUST MODEL" in html
     assert "nw-trust-strip" in html
+    assert "Hackathon Readiness" in html
+    assert "3/8 gates complete" in html
 
 
 def test_render_topbar_with_scan_passes_to_trust_strip() -> None:
@@ -337,6 +340,24 @@ def test_render_topbar_default_scan_shows_fixture_evidence() -> None:
 
     assert "Clean PNG -> pass." in html
     assert "PNG trailing bytes -> blocked." in html
+
+
+def test_submission_readiness_tracks_run_and_submission_blockers() -> None:
+    html = render_submission_readiness(
+        scan={"status": "review", "export_gate": "blocked"},
+        operator_state={
+            "generation": {"status": "success"},
+            "checkpoint": "approved",
+            "export_packet": {"path": "outputs/exports/nw.json"},
+            "minicpm_judge": {"status": "missing_secret"},
+            "nemotron_evidence": {"status": "missing_secret"},
+        },
+    )
+
+    assert "Hackathon Readiness" in html
+    assert "6/8 gates complete" in html
+    assert "MiniCPM and Nemotron" in html
+    assert "Final demo video and social post URLs" in html
 
 
 # --- render_inspector sponsor evidence tests ---

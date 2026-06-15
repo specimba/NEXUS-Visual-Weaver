@@ -102,6 +102,7 @@ def write_export_packet(
         "repo_id": "black-forest-labs/FLUX.2-klein-4B",
     }
     locate_grounding = operator_state.get("locateanything_grounding") or {}
+    st3gg_override_reason = str(operator_state.get("st3gg_override_reason", "")).strip()
     packet = {
         "schema": "nexus_visual_weaver.export_packet.v1",
         "run_id": run_id,
@@ -113,6 +114,7 @@ def write_export_packet(
         "artifact": artifact,
         "generation": generation,
         "st3gg_scan": scan,
+        "st3gg_override_reason": st3gg_override_reason or None,
         "locateanything_grounding": locate_grounding,
         "offellia_judge": offellia,
         "minicpm_judge": operator_state.get("minicpm_judge") or {},
@@ -147,6 +149,7 @@ def write_export_packet(
             "tiny_titan_sidecar": tiny_titan.get("status") in {"success", "available", "sidecar"},
             "raven_quality_stack": True,
             "locateanything_grounding": bool(locate_grounding.get("targets") or locate_grounding.get("repo_id")),
+            "st3gg_override_recorded": bool(st3gg_override_reason),
             "st3gg_export_gate": scan.get("export_gate"),
         },
     }

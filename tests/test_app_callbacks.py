@@ -146,6 +146,40 @@ def test_export_blocks_without_checkpoint() -> None:
     assert "checkpoint" in blocked[13]["message"].lower()
 
 
+def test_export_allows_st3gg_review_with_explicit_override() -> None:
+    from pathlib import Path
+
+    result = app.run_weave(
+        "gothic patent leather platform boots, crimson hardware",
+        "Strict",
+        "Wan2.2 I2V",
+        False,
+        None,
+        "Forge",
+    )
+    run = result[13]
+    artifact_path = Path("outputs/test-override-artifact.png")
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIEND\xaeB`\x82NEXUS_REVIEW")
+    state = {
+        **result[15],
+        "generation": {**result[15]["generation"], "status": "success", "output_path": str(artifact_path)},
+        "checkpoint": "approved",
+        "provider_state": "checkpointed",
+    }
+    review_scan = {"status": "review", "export_gate": "blocked", "findings": ["high entropy sample"], "purification_actions": ["manual review"]}
+
+    blocked = app.export_packet(run, False, review_scan, "Forge", state, "")
+    assert blocked[13]["provider_state"] == "blocked"
+    assert "override reason" in blocked[13]["message"].lower()
+
+    exported = app.export_packet(run, False, review_scan, "Forge", state, "Judge-reviewed generated PNG; evidence packet only.")
+    assert exported[13]["provider_state"] == "exported"
+    assert exported[13]["export"] == "override"
+    assert exported[13]["st3gg_override_reason"] == "Judge-reviewed generated PNG; evidence packet only."
+    assert "export_packet" in exported[13]
+
+
 def test_reference_scan_cannot_clear_blocked_generated_artifact() -> None:
     base = app.ROOT / "outputs" / "test-app-callbacks"
     base.mkdir(parents=True, exist_ok=True)

@@ -131,6 +131,20 @@ def test_export_packet_hackathon_claims_st3gg_export_gate(monkeypatch) -> None:
     assert payload_blocked["hackathon_claims"]["st3gg_export_gate"] == "blocked"
 
 
+def test_export_packet_records_st3gg_override_reason(monkeypatch) -> None:
+    monkeypatch.setenv("NEXUS_EXPORT_DIR", "outputs/test-exports")
+    run = build_command_center_run("review override brief")
+    scan = {"status": "review", "export_gate": "blocked"}
+    state = _make_base_state(st3gg_override_reason="Human reviewed generated artifact for evidence-only export.")
+
+    result = write_export_packet(run=run, scan=scan, operator_state=state, adult_mode=False)
+    payload = json.loads(Path(result["path"]).read_text(encoding="utf-8"))
+
+    assert payload["st3gg_override_reason"] == "Human reviewed generated artifact for evidence-only export."
+    assert payload["hackathon_claims"]["st3gg_override_recorded"] is True
+    assert payload["hackathon_claims"]["st3gg_export_gate"] == "blocked"
+
+
 def test_export_packet_includes_model_stack_and_prompts(monkeypatch) -> None:
     monkeypatch.setenv("NEXUS_EXPORT_DIR", "outputs/test-exports")
     run = build_command_center_run("raven archivist couture brief")
