@@ -271,6 +271,25 @@ def test_export_packet_redacts_raw_payload_paths_and_secret_like_values(monkeypa
     assert payload["provider_states"]["minicpm"] == "failed"
 
 
+def test_export_packet_redacts_windows_backslash_paths_on_linux(monkeypatch) -> None:
+    monkeypatch.setenv("NEXUS_EXPORT_DIR", "outputs/test-exports")
+    run = build_command_center_run("redaction brief")
+    scan = {
+        "status": "review",
+        "export_gate": "blocked",
+        "findings": [r"raw hidden bytes at C:\Users\speci.000\Downloads\thing.png"],
+        "purification_actions": [],
+    }
+    state = _make_base_state()
+
+    result = write_export_packet(run=run, scan=scan, operator_state=state, adult_mode=False)
+    payload = json.loads(Path(result["path"]).read_text(encoding="utf-8"))
+    serialized = json.dumps(payload)
+
+    assert r"C:\Users\speci.000\Downloads" not in serialized
+    assert "[local_path]/thing.png" in serialized
+
+
 def test_export_packet_records_st3gg_override_reason(monkeypatch) -> None:
     monkeypatch.setenv("NEXUS_EXPORT_DIR", "outputs/test-exports")
     run = build_command_center_run("gothic patent leather platform boots")

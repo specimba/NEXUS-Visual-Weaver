@@ -1,4 +1,6 @@
 import app
+import hashlib
+from pathlib import Path
 from nexus_visual_weaver.planner import build_command_center_run
 
 
@@ -41,6 +43,21 @@ def test_checkpoint_seed_uses_only_last_8_chars() -> None:
     # "nw-aabbccddee11223344" -> last 8 is "11223344"
     result = app._checkpoint_seed("nw-aabbccddee11223344")
     assert result == int("11223344", 16) % 1_000_000
+
+
+def test_safe_file_hash_streams_digest_and_size() -> None:
+    payload = b"nexus-visual-weaver" * 1024
+    target = Path("outputs/test-hash-reference.bin")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload)
+
+    try:
+        digest, size = app._safe_file_hash(str(target))
+
+        assert digest == hashlib.sha256(payload).hexdigest()
+        assert size == len(payload)
+    finally:
+        target.unlink(missing_ok=True)
 
 
 # --- _wardrobe_summary tests ---

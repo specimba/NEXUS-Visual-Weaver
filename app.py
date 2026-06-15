@@ -84,10 +84,15 @@ def _safe_file_hash(path: str | None) -> tuple[str | None, int | None]:
         return None, None
     try:
         target = Path(path)
-        data = target.read_bytes()
+        sha256 = hashlib.sha256()
+        size = 0
+        with target.open("rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                sha256.update(chunk)
+                size += len(chunk)
     except OSError:
         return None, None
-    return hashlib.sha256(data).hexdigest(), len(data)
+    return sha256.hexdigest(), size
 
 
 def _safe_reference_url_metadata(reference_url: str | None) -> dict[str, Any] | None:

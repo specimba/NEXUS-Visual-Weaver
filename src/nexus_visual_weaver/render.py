@@ -132,7 +132,13 @@ def render_trust_strip(scan: dict | None = None, operator_state: dict | None = N
     status = str(scan.get("status", "idle")).upper()
     export_gate = str(scan.get("export_gate", "pending")).upper()
     checkpoint = str(operator_state.get("checkpoint", "pending")).replace("_", " ").title()
-    findings = [_redact_scan_text(item) for item in (scan.get("findings") or ["No upload selected. Always-on scanner ready."])]
+    raw_findings = scan.get("findings")
+    if raw_findings is None:
+        default_finding = "No upload selected. Always-on scanner ready." if status == "IDLE" else "No findings."
+        raw_findings = [default_finding]
+    elif not raw_findings:
+        raw_findings = ["No findings." if status != "IDLE" else "No upload selected. Always-on scanner ready."]
+    findings = [_redact_scan_text(item) for item in raw_findings]
     actions = [_redact_scan_text(item) for item in (scan.get("purification_actions") or [
         "strip metadata before export",
         "truncate PNG after IEND when needed",

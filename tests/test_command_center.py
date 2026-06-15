@@ -259,6 +259,14 @@ def test_render_trust_strip_pass_scan_shows_clear_export() -> None:
     assert "all checks passed" in html
 
 
+def test_render_trust_strip_clean_empty_findings_shows_no_findings() -> None:
+    scan = {"status": "pass", "export_gate": "clear", "findings": [], "purification_actions": []}
+    html = render_trust_strip(scan=scan)
+
+    assert "No findings." in html
+    assert "No upload selected. Always-on scanner ready." not in html
+
+
 def test_render_trust_strip_review_scan_shows_blocked_export() -> None:
     scan = {"status": "review", "export_gate": "blocked", "findings": ["trailing data after IEND"], "purification_actions": ["truncate PNG"]}
     html = render_trust_strip(scan=scan)

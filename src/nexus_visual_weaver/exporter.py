@@ -6,7 +6,7 @@ import json
 import os
 import re
 import time
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .catalog import active_stack, parameter_budget
@@ -58,7 +58,7 @@ WINDOWS_PATH_RE = re.compile(r"[A-Za-z]:[\\/][^\s\"']+")
 def _sanitize_text(value: str) -> str:
     text = SECRET_VALUE_RE.sub("[redacted_secret]", value)
     text = CREDENTIAL_NAME_RE.sub("[redacted_credential_name]", text)
-    text = WINDOWS_PATH_RE.sub(lambda match: f"[local_path]/{Path(match.group(0)).name}", text)
+    text = WINDOWS_PATH_RE.sub(lambda match: f"[local_path]/{PureWindowsPath(match.group(0)).name}", text)
     repo_text = str(REPO_ROOT)
     if repo_text in text:
         text = text.replace(repo_text, "[repo]")
