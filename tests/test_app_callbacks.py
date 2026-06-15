@@ -97,6 +97,36 @@ def test_run_weave_returns_stateful_dashboard_packet() -> None:
     assert result[13].checkpoint.checkpoint_id.startswith("nw-")
     assert result[15]["provider_state"] == "checkpointed"
     assert result[16]["interactive"] is True
+    assert result[15]["creator_controls"]["wardrobe"]["footwear"] == "platform boots"
+    assert result[15]["generation"]["lora_status"] == "disabled"
+
+
+def test_run_weave_persists_additive_creator_controls_and_reference_url_metadata() -> None:
+    result = app.run_weave(
+        "gothic patent leather platform boots, crimson hardware",
+        "Frontier",
+        "LTX-2.3",
+        False,
+        None,
+        "Wardrobe",
+        "layered tactical silhouette",
+        "faux fur collar coat",
+        "black mesh layer",
+        "patent leather heels",
+        "obsidian, pearl, crimson",
+        "silver occult buckles",
+        "https://shop.example.test/item/123",
+    )
+
+    state = result[15]
+    run = result[13]
+
+    assert state["creator_controls"]["reasoning_mode"] == "Frontier"
+    assert state["creator_controls"]["wardrobe"]["footwear"] == "patent leather heels"
+    assert state["reference_metadata"][0]["source"] == "url"
+    assert state["reference_metadata"][0]["domain"] == "shop.example.test"
+    assert "url_hash" in state["reference_metadata"][0]
+    assert run.request.creator_controls["wardrobe"]["outerwear"] == "faux fur collar coat"
 
 
 def test_operator_actions_transition_checkpoint_export_and_stop() -> None:

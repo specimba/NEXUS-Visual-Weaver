@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 import sys
+import hashlib
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import gradio as gr
 
@@ -77,6 +79,103 @@ def _file_path(uploaded: Any) -> str | None:
     return str(path) if path else None
 
 
+def _safe_file_hash(path: str | None) -> tuple[str | None, int | None]:
+    if not path:
+        return None, None
+    try:
+        target = Path(path)
+        data = target.read_bytes()
+    except OSError:
+        return None, None
+    return hashlib.sha256(data).hexdigest(), len(data)
+
+
+def _safe_reference_url_metadata(reference_url: str | None) -> dict[str, Any] | None:
+    if not reference_url:
+        return None
+    parsed = urlparse(reference_url.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return {"source": "url", "status": "invalid_url", "message": "Reference URL must be http(s)."}
+    url_hash = hashlib.sha256(reference_url.strip().encode("utf-8")).hexdigest()
+    return {
+        "source": "url",
+        "status": "metadata_only",
+        "domain": parsed.netloc.lower(),
+        "url_hash": url_hash,
+        "message": "URL stored as metadata only; Space runtime does not crawl or copy shop images.",
+    }
+
+
+def _reference_metadata(uploaded: Any, reference_url: str | None, scan: dict[str, Any]) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    path = _file_path(uploaded)
+    if path:
+        file_hash, size = _safe_file_hash(path)
+        records.append(
+            {
+                "source": "upload",
+                "basename": Path(path).name,
+                "sha256": file_hash,
+                "size_bytes": size,
+                "st3gg_status": scan.get("status"),
+                "export_gate": scan.get("export_gate"),
+                "magic": scan.get("magic"),
+                "extension": scan.get("extension"),
+            }
+        )
+    url_record = _safe_reference_url_metadata(reference_url)
+    if url_record:
+        records.append(url_record)
+    return records
+
+
+def _creator_controls(
+    reasoning_mode: str,
+    video_preset: str,
+    silhouette: str | None = None,
+    outerwear: str | None = None,
+    upper_body: str | None = None,
+    footwear: str | None = None,
+    palette: str | None = None,
+    hardware: str | None = None,
+    locate_focus: list[str] | None = None,
+) -> dict[str, Any]:
+    wardrobe = {
+        "silhouette": silhouette or "structured long coat",
+        "outerwear": outerwear or "black patent leather long coat",
+        "upper_body": upper_body or "Chantilly lace neckline",
+        "footwear": footwear or "platform boots",
+        "palette": palette or "black, crimson, cyan neon",
+        "hardware": hardware or "crimson hardware",
+        "locked_slots": ["outerwear", "upper_body", "footwear", "jewelry"],
+        "locate_focus": locate_focus or ["outerwear", "footwear", "jewelry"],
+    }
+    return {
+        "reasoning_mode": reasoning_mode,
+        "video_preset": video_preset,
+        "wardrobe": wardrobe,
+        "generation": {
+            "flux_primary": "black-forest-labs/FLUX.2-klein-9B",
+            "flux_sidecar": "black-forest-labs/FLUX.2-klein-4B",
+            "lora_policy": "attempt compatible runtime adapter; report loaded/skipped/failed",
+        },
+    }
+
+
+def _prompt_with_controls(prompt: str, controls: dict[str, Any]) -> str:
+    wardrobe = controls.get("wardrobe", {})
+    additions = [
+        wardrobe.get("silhouette"),
+        wardrobe.get("outerwear"),
+        wardrobe.get("upper_body"),
+        wardrobe.get("footwear"),
+        wardrobe.get("palette"),
+        wardrobe.get("hardware"),
+    ]
+    suffix = ", ".join(str(item) for item in additions if item)
+    return f"{prompt}\nWardrobe controls: {suffix}" if suffix else prompt
+
+
 def _generated_output_path(operator_state: dict[str, Any] | None) -> str | None:
     generation = (operator_state or {}).get("generation") or {}
     output_path = generation.get("output_path")
@@ -137,16 +236,41 @@ def run_weave(
     adult_mode: bool,
     upload: Any,
     active_section: str,
+    silhouette: str | None = None,
+    outerwear: str | None = None,
+    upper_body: str | None = None,
+    footwear: str | None = None,
+    palette: str | None = None,
+    hardware: str | None = None,
+    reference_url: str | None = None,
 ) -> tuple[Any, ...]:
     prompt = prompt.strip() or DEFAULT_PROMPT
+    controls = _creator_controls(
+        reasoning_mode=reasoning_mode,
+        video_preset=video_preset,
+        silhouette=silhouette,
+        outerwear=outerwear,
+        upper_body=upper_body,
+        footwear=footwear,
+        palette=palette,
+        hardware=hardware,
+    )
+    controlled_prompt = _prompt_with_controls(prompt, controls)
+    reference_scan = scan_file(_file_path(upload))
+    reference_metadata = _reference_metadata(upload, reference_url, reference_scan)
     run = build_command_center_run(
-        prompt=prompt,
+        prompt=controlled_prompt,
         mode=reasoning_mode,
         video_preset=video_preset,
         adult_mode=adult_mode,
+        creator_controls=controls,
+        reference_metadata=reference_metadata,
     )
-    reference_scan = scan_file(_file_path(upload))
-    generation = generate_flux_image(run.refined_prompt.refined, seed=_checkpoint_seed(run.checkpoint.checkpoint_id))
+    generation = generate_flux_image(
+        run.refined_prompt.refined,
+        seed=_checkpoint_seed(run.checkpoint.checkpoint_id),
+        adult_mode=adult_mode,
+    )
     generated_scan = scan_file(generation.output_path) if generation.output_path else scan_file(None)
     minicpm = judge_with_minicpm(
         prompt=run.refined_prompt.refined,
@@ -168,6 +292,8 @@ def run_weave(
         "export": generated_scan.get("export_gate", "pending"),
         "message": generation.message or "Run packet generated. Human checkpoint required before provider promotion or export.",
         "generation": generation.to_dict(),
+        "creator_controls": controls,
+        "reference_metadata": reference_metadata,
         "reference_scan": reference_scan,
         "generated_scan": generated_scan,
         "minicpm_judge": minicpm.to_dict(),
@@ -291,10 +417,12 @@ def scan_reference(
     upload: Any,
     active_section: str,
     operator_state: dict[str, Any] | None,
+    reference_url: str | None = None,
 ) -> tuple[Any, ...]:
     state = operator_state or _default_operator_state()
     reference_path = _file_path(upload)
     reference_scan = scan_file(reference_path)
+    reference_metadata = _reference_metadata(upload, reference_url, reference_scan)
     generated_scan = _authoritative_generated_scan(state)
     minicpm = None
     if run is not None and reference_path:
@@ -307,6 +435,7 @@ def scan_reference(
     next_state = {
         **state,
         **({"reference_judge": minicpm.to_dict()} if minicpm else {}),
+        "reference_metadata": reference_metadata,
         "reference_scan": reference_scan,
         "reference_export_gate": reference_scan.get("export_gate", "pending"),
         "export": state.get("export", generated_scan.get("export_gate", "pending")),
@@ -455,6 +584,43 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
                     label="Video Path Preset",
                 )
         with gr.Row():
+            silhouette = gr.Dropdown(
+                ["structured long coat", "fitted gothic bodice", "layered tactical silhouette"],
+                value="structured long coat",
+                label="Silhouette",
+            )
+            outerwear = gr.Dropdown(
+                ["black patent leather long coat", "faux fur collar coat", "tailored rain slicker"],
+                value="black patent leather long coat",
+                label="Outerwear",
+            )
+            upper_body = gr.Dropdown(
+                ["Chantilly lace neckline", "black mesh layer", "structured corset bodice"],
+                value="Chantilly lace neckline",
+                label="Upper Body",
+            )
+            footwear = gr.Dropdown(
+                ["platform boots", "patent leather heels", "armored couture boots"],
+                value="platform boots",
+                label="Footwear",
+            )
+        with gr.Row():
+            palette = gr.Dropdown(
+                ["black, crimson, cyan neon", "obsidian, pearl, crimson", "graphite, magenta, cold blue"],
+                value="black, crimson, cyan neon",
+                label="Palette",
+            )
+            hardware = gr.Dropdown(
+                ["crimson hardware", "silver occult buckles", "holographic NEXUS sigils"],
+                value="crimson hardware",
+                label="Hardware",
+            )
+            reference_url = gr.Textbox(
+                label="Reference URL (metadata only)",
+                placeholder="https://shop.example/reference-garment",
+                scale=2,
+            )
+        with gr.Row():
             upload = gr.File(
                 label="Reference / Output For ST3GG Scan",
                 file_count="single",
@@ -524,7 +690,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
 
     run_click = run_btn.click(
         fn=run_weave,
-        inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav],
+        inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav, silhouette, outerwear, upper_body, footwear, palette, hardware, reference_url],
         outputs=stateful_outputs,
         api_name="run_active_weave",
         concurrency_limit=1,
@@ -532,7 +698,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
     )
     run_submit = prompt.submit(
         fn=run_weave,
-        inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav],
+        inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav, silhouette, outerwear, upper_body, footwear, palette, hardware, reference_url],
         outputs=stateful_outputs,
         api_name=False,
         concurrency_limit=1,
@@ -565,7 +731,7 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
     )
     scan_btn.click(
         fn=scan_reference,
-        inputs=[active_run_state, adult_mode, upload, section_nav, operator_state],
+        inputs=[active_run_state, adult_mode, upload, section_nav, operator_state, reference_url],
         outputs=dashboard_outputs + [operator_state, stop_btn, scan_state],
         api_name="scan_reference",
         queue=False,

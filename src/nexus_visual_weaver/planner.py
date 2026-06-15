@@ -17,10 +17,20 @@ def build_command_center_run(
     mode: str = "Strict",
     video_preset: str = "Wan2.2 I2V",
     adult_mode: bool = False,
+    creator_controls: dict | None = None,
+    reference_metadata: list[dict] | None = None,
 ) -> GenerationRun:
-    request = CreativeRequest(prompt=prompt, adult_mode=adult_mode)
+    controls = creator_controls or {}
+    references = reference_metadata or []
+    request = CreativeRequest(
+        prompt=prompt,
+        adult_mode=adult_mode,
+        references=[str(item.get("id") or item.get("basename") or item.get("url_hash")) for item in references],
+        creator_controls=controls,
+        reference_metadata=references,
+    )
     refined = refine_prompt(prompt, adult_mode=adult_mode)
-    outfit = build_outfit_graph(refined.refined, adult_mode=adult_mode)
+    outfit = build_outfit_graph(refined.refined, adult_mode=adult_mode, controls=controls.get("wardrobe") if isinstance(controls, dict) else None)
     inspection = inspect_outfit(outfit)
     lore = build_lore_beats(refined.refined)
     video = build_video_plan(video_preset)
@@ -52,4 +62,3 @@ def build_command_center_run(
         video=video,
         checkpoint=checkpoint,
     )
-

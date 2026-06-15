@@ -17,16 +17,31 @@ SLOT_BLUEPRINTS: list[tuple[str, str, str, str, str]] = [
 ]
 
 
-def build_outfit_graph(prompt: str, adult_mode: bool = False) -> OutfitGraph:
+def build_outfit_graph(prompt: str, adult_mode: bool = False, controls: dict | None = None) -> OutfitGraph:
     lowered = prompt.lower()
+    controls = controls or {}
+    locked_slots = set(controls.get("locked_slots") or [])
+    locate_focus = set(controls.get("locate_focus") or [])
     slots: list[WardrobeSlot] = []
     for index, (name, description, material, palette, lora_hint) in enumerate(SLOT_BLUEPRINTS):
+        if name == "outerwear" and controls.get("outerwear"):
+            description = str(controls["outerwear"])
+        if name == "upper_body" and controls.get("upper_body"):
+            material = str(controls["upper_body"])
+        if name == "footwear" and controls.get("footwear"):
+            description = str(controls["footwear"])
+        if name == "jewelry" and controls.get("hardware"):
+            material = str(controls["hardware"])
+        if controls.get("palette"):
+            palette = str(controls["palette"])
         locked = any(token in lowered for token in name.split("_")) or material.replace("_", " ") in lowered
         if name == "outerwear" and "coat" in lowered:
             locked = True
         if name == "footwear" and ("boot" in lowered or "platform" in lowered):
             locked = True
         if name == "jewelry" and ("crimson" in lowered or "hardware" in lowered):
+            locked = True
+        if name in locked_slots:
             locked = True
         slots.append(
             WardrobeSlot(
@@ -37,11 +52,10 @@ def build_outfit_graph(prompt: str, adult_mode: bool = False) -> OutfitGraph:
                 lora_hint=lora_hint,
                 locked=locked,
                 adult_only=False if not adult_mode else name in {"upper_body", "lower_body"},
-                locate_region="auto-map",
+                locate_region="manual-focus" if name in locate_focus else "auto-map",
                 edit_priority=max(1, 5 - index // 2),
             )
         )
     locked_count = sum(1 for slot in slots if slot.locked)
     score = round(0.68 + min(0.24, locked_count * 0.035), 2)
     return OutfitGraph(slots=slots, score=score)
-

@@ -10,7 +10,29 @@ def _make_base_state(**overrides):
         "provider_state": "export_ready",
         "checkpoint": "approved",
         "message": "approved",
-        "generation": {"status": "success", "output_path": "/data/artifact.png", "hf_token_present": True},
+        "generation": {
+            "status": "success",
+            "provider_state": "generated",
+            "output_path": "/data/artifact.png",
+            "hf_token_present": True,
+            "lora_status": "loaded",
+            "lora_repo_id": "DeverStyle/Flux.2-Klein-Loras",
+            "lora_message": "Adapter loaded and applied for this generation.",
+        },
+        "creator_controls": {
+            "reasoning_mode": "Strict",
+            "wardrobe": {"outerwear": "black patent leather long coat", "footwear": "platform boots"},
+        },
+        "reference_metadata": [
+            {
+                "source": "upload",
+                "basename": "C:/Users/speci.000/Downloads/reference.png",
+                "sha256": "a" * 64,
+                "size_bytes": 128,
+                "st3gg_status": "pass",
+                "export_gate": "clear",
+            }
+        ],
         "minicpm_judge": {"status": "success", "repo_id": "openbmb/MiniCPM-V-4.6"},
         "nemotron_evidence": {"status": "missing_secret", "repo_id": "nvidia/NVIDIA-Nemotron-Parse-v1.2"},
     }
@@ -34,7 +56,11 @@ def test_write_export_packet_records_evidence_without_secrets(monkeypatch) -> No
     assert payload["parameter_budget"]["status"] == "pass"
     assert "token" not in json.dumps(payload).lower()
     assert payload["artifact"] == "artifact.png"
+    assert payload["image_basename"] == "artifact.png"
     assert payload["generation"]["output_path"] == "artifact.png"
+    assert payload["lora_status"]["status"] == "loaded"
+    assert payload["creator_controls"]["wardrobe"]["footwear"] == "platform boots"
+    assert payload["reference_metadata"][0]["basename"] == "reference.png"
     assert "/data/" not in json.dumps(payload)
 
 
@@ -184,3 +210,62 @@ def test_export_packet_returns_both_path_and_packet(monkeypatch) -> None:
     assert "packet" in result
     assert isinstance(result["packet"], dict)
     assert result["packet"]["schema"] == "nexus_visual_weaver.export_packet.v1"
+
+
+def test_export_packet_redacts_raw_payload_paths_and_secret_like_values(monkeypatch) -> None:
+    monkeypatch.setenv("NEXUS_EXPORT_DIR", "outputs/test-exports")
+    run = build_command_center_run(
+        "redaction brief",
+        creator_controls={"wardrobe": {"footwear": "platform boots"}},
+        reference_metadata=[{"source": "url", "domain": "shop.example.test", "url_hash": "b" * 64}],
+    )
+    scan = {
+        "status": "review",
+        "export_gate": "blocked",
+        "payload_excerpt": "hf_" + "abcdefghijklmnopqrstuvwxyz123456",
+        "findings": ["raw hidden bytes at C:/Users/speci.000/Downloads/thing.png"],
+        "purification_actions": ["base64 payload removed from /data/nexus_visual_weaver/artifact.png"],
+    }
+    state = _make_base_state(
+        generation={
+            "status": "success",
+            "provider_state": "generated",
+            "output_path": "/data/nexus_visual_weaver/artifact.png",
+            "hf_token_present": True,
+            "lora_status": "failed",
+            "lora_repo_id": "example/lora",
+            "lora_message": "RuntimeError: failed without token value",
+        },
+        minicpm_judge={
+            "status": "failed",
+            "provider_state": "failed",
+            "provider": "OpenBMB",
+            "repo_id": "openbmb/MiniCPM-V-4.6",
+            "model": "MiniCPM-V-4.6",
+            "message": "Set MINICPM_API_KEY in Space secrets.",
+            "evidence": {"raw_summary": "Bearer " + "secret-value", "configured": True},
+        },
+        reference_metadata=[
+            {
+                "source": "upload",
+                "basename": "C:/Users/speci.000/Downloads/reference.png",
+                "sha256": "c" * 64,
+                "size_bytes": 2048,
+                "st3gg_status": "review",
+                "export_gate": "blocked",
+            }
+        ],
+    )
+
+    result = write_export_packet(run=run, scan=scan, operator_state=state, adult_mode=False)
+    payload = json.loads(Path(result["path"]).read_text(encoding="utf-8"))
+    serialized = json.dumps(payload)
+
+    assert "payload_excerpt" not in serialized
+    assert "raw_summary" not in serialized
+    assert "Bearer " + "secret-value" not in serialized
+    assert "MINICPM_API_KEY" not in serialized
+    assert "/data/" not in serialized
+    assert "C:/Users/speci.000/Downloads" not in serialized
+    assert payload["st3gg_verdict"] == {"status": "review", "export_gate": "blocked"}
+    assert payload["provider_states"]["minicpm"] == "failed"

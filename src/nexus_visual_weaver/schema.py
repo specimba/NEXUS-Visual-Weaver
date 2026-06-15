@@ -17,6 +17,8 @@ class CreativeRequest:
     output_goal: str = "image_to_video"
     adult_mode: bool = False
     references: list[str] = field(default_factory=list)
+    creator_controls: dict[str, Any] = field(default_factory=dict)
+    reference_metadata: list[dict[str, Any]] = field(default_factory=list)
     created_at: str = field(default_factory=utc_now)
 
 
