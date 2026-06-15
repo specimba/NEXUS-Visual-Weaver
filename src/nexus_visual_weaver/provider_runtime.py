@@ -81,7 +81,7 @@ def _post_json(url: str, token: str, payload: dict[str, Any], timeout: float) ->
     Raises ValueError if the URL is not an HTTP or HTTPS URL with a host.
     
     Parameters:
-    	token (str): Bearer token for authorization
+    	token (str): Authorization credential passed through the request header
     	payload (dict[str, Any]): Data to send as JSON in the request body
     	timeout (float): Request timeout in seconds
     
