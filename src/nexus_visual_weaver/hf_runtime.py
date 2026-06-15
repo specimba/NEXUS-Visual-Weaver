@@ -92,7 +92,7 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
     started = time.perf_counter()
     try:
         import torch
-        from diffusers import FluxPipeline
+        from diffusers import Flux2KleinPipeline
     except Exception as exc:  # pragma: no cover - depends on Space runtime packages.
         return HFGenerationResult(
             status="missing_runtime",
@@ -125,7 +125,7 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
     for candidate in repo_candidates:
         try:
             dtype = torch.bfloat16
-            pipe = FluxPipeline.from_pretrained(candidate, torch_dtype=dtype, token=token)
+            pipe = Flux2KleinPipeline.from_pretrained(candidate, torch_dtype=dtype, token=token)
             pipe.enable_model_cpu_offload()
             generator = torch.Generator(device="cuda").manual_seed(seed)
             image = pipe(
