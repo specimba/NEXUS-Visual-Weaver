@@ -59,6 +59,7 @@ def _display_state(value: str) -> str:
     normalized = str(value or "").replace("_", " ").strip().lower()
     labels = {
         "blocked": "Export Gate Active",
+        "generated": "Generated",
         "missing secret": "Optional - Secret Required",
         "missing_secret": "Optional - Secret Required",
         "export_ready": "Export Ready",
@@ -947,7 +948,13 @@ def render_status_bar(operator_state: dict | None = None) -> str:
     operator_state = operator_state or {}
     raw_provider_state = str(operator_state.get("provider_state", "idle"))
     provider_state = _display_state(raw_provider_state)
-    stop_class = "nw-stop-idle" if provider_state == "Idle" else "nw-stop-active"
+    stop_class = (
+        "nw-stop-idle"
+        if provider_state == "Idle"
+        else "nw-stop-pass"
+        if raw_provider_state in {"generated", "exported", "export_ready", "checkpointed"}
+        else "nw-stop-active"
+    )
     return f"""
     <footer class="nw-statusbar">
       {_metric("Runs", "112")}

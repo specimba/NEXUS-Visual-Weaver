@@ -823,25 +823,26 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
                 scale=2,
             )
         with gr.Row():
-            upload = gr.File(
-                label="Reference / Output For ST3GG Scan",
-                file_count="single",
-                type="filepath",
-                scale=3,
-            )
             adult_mode = gr.Checkbox(
                 value=False,
                 label="Adult Mode 18+ catalog scope",
                 info="Off by default. Enables adult-tagged catalog entries but does not disable security, consent, or export gates.",
                 scale=2,
             )
-            run_btn = gr.Button("Run Active Weave", variant="primary", scale=1)
-            stop_btn = gr.Button("Stop Provider Job", variant="stop", interactive=False, scale=1)
-        with gr.Row(elem_id="nw-operator-actions", elem_classes=["nw-operator-actions"]):
-            scan_btn = gr.Button("Scan Reference", scale=1)
+            run_btn = gr.Button("Run Active Weave", variant="primary", scale=2)
             checkpoint_btn = gr.Button("Approve Checkpoint", scale=1)
             export_btn = gr.Button("Prepare Export Packet", scale=1)
             reset_btn = gr.Button("Reset Demo State", scale=1)
+        with gr.Row(elem_id="nw-operator-actions", elem_classes=["nw-operator-actions"]):
+            stop_btn = gr.Button("Stop Provider Job", variant="stop", interactive=False, scale=1)
+        with gr.Accordion("Optional ST3GG file/reference scan", open=False):
+            gr.Markdown("Upload only when you want ST3GG to inspect an external reference or output file. Generation does not require an upload.")
+            upload = gr.File(
+                label="Optional file for ST3GG scan",
+                file_count="single",
+                type="filepath",
+            )
+            scan_btn = gr.Button("Scan Uploaded File", scale=1)
         override_reason = gr.Textbox(
             label="ST3GG Override Reason",
             placeholder="Required when ST3GG is review/blocked; explain why this audit packet may be written.",
@@ -859,13 +860,14 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
             )
             command_rail_html = gr.HTML(initial_regions["command_rail"], container=False)
         with gr.Column(scale=5, min_width=620, elem_id="nw-main-column"):
+            artifact_html = gr.HTML(initial_regions["artifacts"], container=False)
             workflow_html = gr.HTML(initial_regions["workflow"], container=False)
             operations_html = gr.HTML(initial_regions["operations"], container=False)
-            artifact_html = gr.HTML(initial_regions["artifacts"], container=False)
             drawer_html = gr.HTML(initial_regions["drawer"], container=False)
         with gr.Column(scale=2, min_width=340, elem_id="nw-side-column"):
             inspector_html = gr.HTML(initial_regions["inspector"], container=False)
-            provider_html = gr.HTML(initial_regions["providers"], container=False)
+            with gr.Accordion("Optional provider lanes", open=False):
+                provider_html = gr.HTML(initial_regions["providers"], container=False)
 
     status_html = gr.HTML(initial_regions["status"], container=False)
 
