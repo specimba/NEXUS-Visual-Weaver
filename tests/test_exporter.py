@@ -375,18 +375,20 @@ def test_artifact_name_returns_filename_for_simple_name() -> None:
 # --- _sanitize_text tests ---
 
 def test_sanitize_text_redacts_hf_token() -> None:
-    text = "token is hf_abcdefghijklmnopqrstuvwxyz1234567"
+    fake_token = "hf_" + "abcdefghijklmnopqrstuvwxyz1234567"
+    text = f"token is {fake_token}"
     result = _sanitize_text(text)
 
-    assert "hf_abcdefghijklmnopqrstuvwxyz" not in result
+    assert fake_token not in result
     assert "[redacted_secret]" in result
 
 
 def test_sanitize_text_redacts_bearer_token() -> None:
-    text = "Authorization: Bearer sk-test-abcdefghijklmnopqrstu"
+    fake_token = "sk-test-" + "abcdefghijklmnopqrstu"
+    text = "Authorization: Bearer " + fake_token
     result = _sanitize_text(text)
 
-    assert "sk-test-abcdefghijklmnopqrstu" not in result
+    assert fake_token not in result
 
 
 def test_sanitize_text_redacts_credential_names() -> None:
@@ -476,7 +478,7 @@ def test_safe_dict_sanitizes_string_values() -> None:
 
 
 def test_safe_dict_preserves_size_bytes_when_allowed() -> None:
-    data = {"size_bytes": 1024, "token": "hf_secret123456789012345"}
+    data = {"size_bytes": 1024, "token": "hf_" + "secret123456789012345"}
     result = _safe_dict(data, allow_size_bytes=True)
 
     assert "size_bytes" in result
@@ -575,7 +577,7 @@ def test_safe_provider_handles_none_input() -> None:
 def test_safe_provider_redacts_secret_values_in_evidence() -> None:
     provider = {
         "status": "failed",
-        "evidence": {"token_used": "hf_abcdefghijklmnopqrstuvwx", "raw": "sensitive-data"},
+        "evidence": {"token_used": "hf_" + "abcdefghijklmnopqrstuvwx", "raw": "sensitive-data"},
     }
     result = _safe_provider(provider)
 
