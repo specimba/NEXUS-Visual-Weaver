@@ -1,0 +1,69 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-06-04T04:30:00+03:00",
+  "source": "GROK_IMAGINE taste_profile.json, normalized for NEXUS Visual Weaver",
+  "description": "Locked taste profile for governed visual creation. Every prompt, outfit, image edit, and video plan is scored against this profile.",
+  "locked_features": {
+    "materials": {
+      "primary": ["patent_leather"],
+      "accents": ["faux_fur", "chantilly_lace"],
+      "hardware": ["crimson_hardware"]
+    },
+    "footwear": ["platform_boots"],
+    "model_aesthetic": {
+      "ethnicity": "slavic_model",
+      "features": ["high_cheekbones", "intense_focused_eyes", "pale_matte_skin", "full_lips"]
+    },
+    "lighting_and_atmosphere": [
+      "cinematic_dramatic_lighting",
+      "deep_obsidian_shadows",
+      "electric_neon_highlights",
+      "rain_slicked_surfaces",
+      "floating_code_data_streams"
+    ],
+    "thematic_elements": [
+      "gothic_haute_couture",
+      "cyberpunk_decadence",
+      "nexus_sigils",
+      "orchestrator_node_glyphs",
+      "holographic_butterfly_wings",
+      "iridescent_data_streams"
+    ],
+    "rendering": {
+      "style": "ultra_photorealistic_flux2",
+      "detail_level": "extreme_micro_detail",
+      "materials_detail": [
+        "leather_grain",
+        "fur_texture",
+        "lace_threads",
+        "metallic_reflections",
+        "skin_pores"
+      ]
+    }
+  },
+  "enforcement_rules": {
+    "must_include": [
+      "At least one primary material (patent_leather)",
+      "Slavic model features",
+      "Crimson hardware accents",
+      "Platform boots or equivalent strong footwear detail"
+    ],
+    "should_include": [
+      "Faux fur or Chantilly lace accents",
+      "NEXUS thematic elements",
+      "High-contrast material textures"
+    ],
+    "forbidden": [
+      "Soft pastel colors unless used as deliberate neon contrast",
+      "Realistic modern fashion without cyberpunk/gothic elevation",
+      "Low-detail or blurry material rendering"
+    ],
+    "trust_scoring_guidelines": {
+      "0.90-1.00": "Perfect alignment - promote to Wisdom",
+      "0.80-0.89": "Strong alignment - approve with minor notes",
+      "0.70-0.79": "Acceptable but needs refinement",
+      "< 0.70": "Reject or force major re-refinement"
+    }
+  }
+}
+

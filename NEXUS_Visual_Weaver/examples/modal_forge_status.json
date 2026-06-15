@@ -1,0 +1,10 @@
+{
+  "modal_role": "offline_forge",
+  "credit_use": "hackathon_modal_credit",
+  "runtime_rule": "HF Space remains primary runtime",
+  "space": "build-small-hackathon/NEXUS_Visual_Weaver",
+  "adapter_goal": "NEXUS couture/lore style LoRA or eval artifact",
+  "status": "planned_or_running",
+  "parameter_rule": "public Space keeps active model budget <=32B",
+  "public_controls": "read-only status panel only"
+}
