@@ -74,6 +74,9 @@ def test_public_stack_uses_flux_9b_and_excludes_offellia() -> None:
 
 
 def test_private_catalog_keeps_stronger_research_models_available() -> None:
+    """
+    Verify that private catalog mode includes OFFELLIA and other research models alongside standard models.
+    """
     private_models, _ = filter_catalog(True)
     repo_ids = {model.repo_id for model in private_models}
 

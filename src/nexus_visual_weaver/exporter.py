@@ -20,6 +20,12 @@ ALLOWED_LOCAL_EXPORT_ROOTS = (
 
 
 def _is_within(path: Path, root: Path) -> bool:
+    """
+    Checks if a path is within a given root directory.
+    
+    Returns:
+        True if the path is within the root directory, False otherwise.
+    """
     try:
         path.relative_to(root)
         return True
@@ -28,6 +34,12 @@ def _is_within(path: Path, root: Path) -> bool:
 
 
 def _safe_export_candidate(candidate: Path) -> Path | None:
+    """
+    Validates and resolves an export directory candidate against allowed roots.
+    
+    Returns:
+        Path | None: The resolved path if within an allowed export root, `None` otherwise.
+    """
     if not candidate.is_absolute():
         candidate = REPO_ROOT / candidate
     resolved = candidate.resolve(strict=False)
@@ -44,6 +56,12 @@ def _safe_export_candidate(candidate: Path) -> Path | None:
 
 
 def _artifact_name(output_path: Any) -> str | None:
+    """
+    Extract the filename from a file path.
+    
+    Returns:
+        filename (str | None): The filename if output_path is provided, None otherwise.
+    """
     if not output_path:
         return None
     return Path(str(output_path)).name
@@ -56,6 +74,12 @@ WINDOWS_PATH_RE = re.compile(r"[A-Za-z]:[\\/][^\s\"']+")
 
 
 def _sanitize_text(value: str) -> str:
+    """
+    Redacts sensitive information and normalizes text for safe export.
+    
+    Returns:
+        str: Text with secrets, credentials, and paths replaced with placeholders, truncated to 1000 characters if necessary.
+    """
     text = SECRET_VALUE_RE.sub("[redacted_secret]", value)
     text = CREDENTIAL_NAME_RE.sub("[redacted_credential_name]", text)
     text = WINDOWS_PATH_RE.sub(lambda match: f"[local_path]/{PureWindowsPath(match.group(0)).name}", text)
@@ -70,6 +94,20 @@ def _sanitize_text(value: str) -> str:
 
 
 def _safe_dict(value: Any, *, allow_size_bytes: bool = False) -> Any:
+    """
+    Recursively sanitize data structures to remove sensitive keys and redact sensitive values.
+    
+    Dictionary keys matching sensitive patterns are dropped unless the key is 'size_bytes' and 
+    allow_size_bytes is True. Lists are limited to the first 40 elements. String values are sanitized 
+    to remove secrets and credentials. Other types are returned unchanged.
+    
+    Parameters:
+    	allow_size_bytes (bool): If True, preserves the 'size_bytes' key in dictionaries even if it 
+    		matches a sensitive pattern. Defaults to False.
+    
+    Returns:
+    	The sanitized input value with sensitive data redacted and sensitive keys removed.
+    """
     if isinstance(value, dict):
         clean: dict[str, Any] = {}
         for key, item in value.items():
@@ -86,6 +124,13 @@ def _safe_dict(value: Any, *, allow_size_bytes: bool = False) -> Any:
 
 
 def _safe_scan(scan: dict[str, Any]) -> dict[str, Any]:
+    """
+    Extract and sanitize selected fields from a scan dictionary.
+    
+    Returns:
+        A dictionary containing status, scanner, export_gate, extension, magic, 
+        findings, and purification_actions.
+    """
     return {
         "status": scan.get("status"),
         "scanner": scan.get("scanner"),
@@ -98,6 +143,15 @@ def _safe_scan(scan: dict[str, Any]) -> dict[str, Any]:
 
 
 def _safe_provider(provider: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    Normalize provider metadata by extracting safe fields and sanitizing sensitive data.
+    
+    Parameters:
+        provider: Provider metadata dict, or None.
+    
+    Returns:
+        Normalized provider dict with extracted and sanitized fields.
+    """
     provider = provider or {}
     evidence = provider.get("evidence") if isinstance(provider.get("evidence"), dict) else {}
     return {
@@ -113,6 +167,12 @@ def _safe_provider(provider: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _safe_reference_metadata(records: Any) -> list[dict[str, Any]]:
+    """
+    Filters and sanitizes reference metadata records.
+    
+    Returns:
+        A list of sanitized reference metadata dicts, limited to the first 20 records.
+    """
     if not isinstance(records, list):
         return []
     cleaned: list[dict[str, Any]] = []
@@ -139,6 +199,13 @@ def _safe_reference_metadata(records: Any) -> list[dict[str, Any]]:
 
 
 def export_root() -> Path:
+    """
+    Selects and creates a permitted directory for writing export JSON packets.
+    
+    Returns:
+        Path: An existing export directory, prioritizing environment configuration
+            and system locations over the repository fallback.
+    """
     requested = os.environ.get("NEXUS_EXPORT_DIR")
     candidates = [Path(requested)] if requested else []
     if Path("/data").exists():
@@ -165,6 +232,19 @@ def write_export_packet(
     operator_state: dict[str, Any],
     adult_mode: bool,
 ) -> dict[str, Any]:
+    """
+    Builds a sanitized JSON export packet and writes it to disk.
+    
+    Sanitizes sensitive metadata from run, scan, and operator state, then writes the
+    resulting packet to a controlled export directory.
+    
+    Parameters:
+        run: Run object containing checkpoint, request, model_stack, and refined_prompt data.
+    
+    Returns:
+        Dictionary with "path" (str) pointing to the written JSON file and "packet" (dict)
+        containing the constructed export packet.
+    """
     run_id = getattr(getattr(run, "checkpoint", None), "checkpoint_id", f"nw-{int(time.time())}")
     run_adult_mode = bool(getattr(getattr(run, "request", None), "adult_mode", adult_mode))
     stack = list(getattr(run, "model_stack", None) or active_stack(run_adult_mode))
