@@ -7,7 +7,7 @@ from .schema import AdapterRecipe, ModelCandidate
 MODEL_CATALOG: list[ModelCandidate] = [
     ModelCandidate(
         repo_id="black-forest-labs/FLUX.2-klein-4B",
-        role="image_generator",
+        role="tiny_titan_sidecar_image_generator",
         task="image-to-image",
         params_b=4.0,
         runtime="diffusers / provider",
@@ -16,13 +16,12 @@ MODEL_CATALOG: list[ModelCandidate] = [
     ),
     ModelCandidate(
         repo_id="black-forest-labs/FLUX.2-klein-9B",
-        role="private_research_image_generator",
+        role="quality_image_generator",
         task="image-to-image",
         params_b=9.0,
         runtime="diffusers / gated provider",
         license="other",
         gated=True,
-        public_demo=False,
         source_url="https://hf.co/black-forest-labs/FLUX.2-klein-9B",
     ),
     ModelCandidate(
@@ -170,7 +169,7 @@ ADAPTER_CATALOG: list[AdapterRecipe] = [
 ]
 
 DEFAULT_ACTIVE_STACK = [
-    "black-forest-labs/FLUX.2-klein-4B",
+    "black-forest-labs/FLUX.2-klein-9B",
     "nvidia/LocateAnything-3B",
     "openbmb/MiniCPM-V-4.6",
     "nvidia/NVIDIA-Nemotron-Parse-v1.2",

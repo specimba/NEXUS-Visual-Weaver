@@ -9,8 +9,10 @@ from pathlib import Path
 from typing import Any
 
 
-FLUX_REPO_ID = "black-forest-labs/FLUX.2-klein-4B"
-PRIVATE_RESEARCH_FLUX_REPO_ID = "black-forest-labs/FLUX.2-klein-9B"
+FLUX_REPO_ID = "black-forest-labs/FLUX.2-klein-9B"
+TINY_TITAN_FLUX_REPO_ID = "black-forest-labs/FLUX.2-klein-4B"
+PRIVATE_RESEARCH_FLUX_REPO_ID = FLUX_REPO_ID
+_PIPELINE_CACHE: dict[str, Any] = {}
 
 
 @dataclass(frozen=True)
@@ -65,13 +67,40 @@ def _hf_token() -> str | None:
     return os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
 
 
+def active_flux_repo_id() -> str:
+    configured = os.environ.get("NEXUS_FLUX_REPO_ID")
+    if configured:
+        return configured
+    if os.environ.get("NEXUS_TINY_TITAN_MODE") == "1":
+        return TINY_TITAN_FLUX_REPO_ID
+    return FLUX_REPO_ID
+
+
+def _repo_candidates(repo_id: str) -> list[str]:
+    candidates = [repo_id]
+    if repo_id != TINY_TITAN_FLUX_REPO_ID and os.environ.get("NEXUS_DISABLE_TINY_TITAN_FALLBACK") != "1":
+        candidates.append(TINY_TITAN_FLUX_REPO_ID)
+    return candidates
+
+
+def _get_flux_pipe(repo_id: str, torch_module: Any, pipeline_cls: Any, token: str | None) -> Any:
+    cached = _PIPELINE_CACHE.get(repo_id)
+    if cached is not None:
+        return cached
+    pipe = pipeline_cls.from_pretrained(repo_id, torch_dtype=torch_module.bfloat16, token=token)
+    pipe.enable_model_cpu_offload()
+    _PIPELINE_CACHE[repo_id] = pipe
+    return pipe
+
+
 def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height: int = 1024, steps: int = 4) -> HFGenerationResult:
+    repo_id = active_flux_repo_id()
     if not hf_runtime_enabled():
         return HFGenerationResult(
             status="disabled",
             provider_state="dry-run",
-            repo_id=FLUX_REPO_ID,
-            message="Real HF generation disabled outside Space. Set NEXUS_ENABLE_REAL_HF=1 to force local execution.",
+            repo_id=repo_id,
+            message="Real HF generation disabled outside Space. Raven Quality Stack uses FLUX.2 Klein 9B by default; set NEXUS_TINY_TITAN_MODE=1 for the 4B sidecar.",
             width=width,
             height=height,
             steps=steps,
@@ -81,12 +110,12 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
     started = time.perf_counter()
     try:
         import torch
-        from diffusers import FluxPipeline
+        from diffusers import Flux2KleinPipeline
     except Exception as exc:  # pragma: no cover - depends on Space runtime packages.
         return HFGenerationResult(
             status="missing_runtime",
             provider_state="blocked",
-            repo_id=FLUX_REPO_ID,
+            repo_id=repo_id,
             message=f"FLUX runtime import failed. Install diffusers main + torch. {_short_error(exc)}",
             width=width,
             height=height,
@@ -98,51 +127,57 @@ def generate_flux_image(prompt: str, *, seed: int = 0, width: int = 1024, height
         return HFGenerationResult(
             status="no_cuda",
             provider_state="blocked",
-            repo_id=FLUX_REPO_ID,
-            message="CUDA is not available to the Space callback; FLUX.2 Klein 4B requires GPU execution.",
+            repo_id=repo_id,
+            message="CUDA is not available to the Space callback; FLUX.2 generation requires GPU execution.",
             width=width,
             height=height,
             steps=steps,
             hf_token_present=bool(_hf_token()),
         )
 
-    try:
-        dtype = torch.bfloat16
-        token = _hf_token()
-        pipe = FluxPipeline.from_pretrained(FLUX_REPO_ID, torch_dtype=dtype, token=token)
-        pipe.enable_model_cpu_offload()
-        generator = torch.Generator(device="cuda").manual_seed(seed)
-        image = pipe(
-            prompt=prompt,
-            height=height,
-            width=width,
-            guidance_scale=1.0,
-            num_inference_steps=steps,
-            generator=generator,
-        ).images[0]
-        output_path = _output_dir() / f"nexus_flux_{int(time.time())}_{seed}.png"
-        image.save(output_path)
-        return HFGenerationResult(
-            status="success",
-            provider_state="generated",
-            repo_id=FLUX_REPO_ID,
-            output_path=str(output_path),
-            message="FLUX.2 Klein 4B generated a real public-demo artifact on HF Space.",
-            latency_seconds=round(time.perf_counter() - started, 2),
-            width=width,
-            height=height,
-            steps=steps,
-            hf_token_present=bool(token),
-        )
-    except Exception as exc:  # pragma: no cover - exercised on HF Space with gated/runtime conditions.
-        return HFGenerationResult(
-            status="error",
-            provider_state="blocked",
-            repo_id=FLUX_REPO_ID,
-            message=f"FLUX.2 generation failed. Check model license acceptance, HF_TOKEN/Space access, and runtime deps. {_short_error(exc)}",
-            latency_seconds=round(time.perf_counter() - started, 2),
-            width=width,
-            height=height,
-            steps=steps,
-            hf_token_present=bool(_hf_token()),
-        )
+    token = _hf_token()
+    errors: list[str] = []
+    for candidate in _repo_candidates(repo_id):
+        try:
+            pipe = _get_flux_pipe(candidate, torch, Flux2KleinPipeline, token)
+            if hasattr(pipe, "set_progress_bar_config"):
+                pipe.set_progress_bar_config(disable=True)
+
+            generator = torch.Generator(device="cuda").manual_seed(seed)
+            image = pipe(
+                prompt=prompt,
+                height=height,
+                width=width,
+                guidance_scale=1.0,
+                num_inference_steps=steps,
+                generator=generator,
+            ).images[0]
+            output_path = _output_dir() / f"nexus_flux_{int(time.time())}_{seed}.png"
+            image.save(output_path)
+            return HFGenerationResult(
+                status="success",
+                provider_state="generated",
+                repo_id=candidate,
+                output_path=str(output_path),
+                message=f"{candidate} generated a real Raven Quality artifact on HF Space.",
+                latency_seconds=round(time.perf_counter() - started, 2),
+                width=width,
+                height=height,
+                steps=steps,
+                hf_token_present=bool(token),
+            )
+        except Exception as exc:  # pragma: no cover - exercised on HF Space with gated/runtime conditions.
+            errors.append(f"{candidate}: {_short_error(exc)}")
+            _PIPELINE_CACHE.pop(candidate, None)
+            continue
+    return HFGenerationResult(
+        status="error",
+        provider_state="blocked",
+        repo_id=repo_id,
+        message=f"FLUX.2 generation failed. Check model license acceptance, HF_TOKEN/Space access, and runtime deps. Attempts: {' | '.join(errors)}",
+        latency_seconds=round(time.perf_counter() - started, 2),
+        width=width,
+        height=height,
+        steps=steps,
+        hf_token_present=bool(_hf_token()),
+    )

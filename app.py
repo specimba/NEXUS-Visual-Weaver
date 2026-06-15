@@ -61,7 +61,7 @@ def _zero_gpu_entrypoint(fn: Any) -> Any:
     gpu_decorator = getattr(spaces, "GPU", None) if spaces is not None else None
     if gpu_decorator is None:
         return fn
-    return gpu_decorator(duration=900)(fn)
+    return gpu_decorator(duration=300)(fn)
 
 
 def _relay_snapshot(adult_mode: bool = False) -> dict[str, Any]:
@@ -527,12 +527,14 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
         inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav],
         outputs=stateful_outputs,
         api_name="run_active_weave",
+        concurrency_limit=1,
     )
     prompt.submit(
         fn=run_weave,
         inputs=[prompt, reasoning_mode, video_preset, adult_mode, upload, section_nav],
         outputs=stateful_outputs,
         api_name=False,
+        concurrency_limit=1,
     )
     adult_mode.change(
         fn=toggle_adult_visibility,
@@ -550,42 +552,49 @@ with gr.Blocks(title="NEXUS Visual Weaver") as demo:
             operator_state,
         ],
         api_name="toggle_adult_catalog",
+        queue=False,
     )
     section_nav.change(
         fn=refresh_section,
         inputs=[section_nav, adult_mode, active_run_state, scan_state, operator_state],
         outputs=[command_rail_html, operations_html, inspector_html, artifact_html, provider_html, scan_json],
         api_name=False,
+        queue=False,
     )
     scan_btn.click(
         fn=scan_reference,
         inputs=[active_run_state, adult_mode, upload, section_nav, operator_state],
         outputs=dashboard_outputs + [operator_state, stop_btn, scan_state],
         api_name="scan_reference",
+        queue=False,
     )
     checkpoint_btn.click(
         fn=approve_checkpoint,
         inputs=[active_run_state, adult_mode, scan_state, section_nav, operator_state],
         outputs=operator_outputs,
         api_name="approve_checkpoint",
+        queue=False,
     )
     export_btn.click(
         fn=export_packet,
         inputs=[active_run_state, adult_mode, scan_state, section_nav, operator_state],
         outputs=operator_outputs,
         api_name="prepare_export_packet",
+        queue=False,
     )
     stop_btn.click(
         fn=stop_provider_job,
         inputs=[active_run_state, adult_mode, scan_state, section_nav, operator_state],
         outputs=operator_outputs,
         api_name="stop_provider_job",
+        queue=False,
     )
     reset_btn.click(
         fn=reset_demo,
         inputs=[adult_mode, section_nav],
         outputs=stateful_outputs,
         api_name="reset_demo_state",
+        queue=False,
     )
     demo.load(
         fn=lambda: (render_catalog_table(False), catalog_summary(False), scan_file(None), scan_file(None), _default_operator_state()),

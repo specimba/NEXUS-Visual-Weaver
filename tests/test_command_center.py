@@ -63,14 +63,14 @@ def test_active_parameter_budget_passes_default_stack() -> None:
     assert budget["active_b"] <= 32.0
 
 
-def test_public_stack_uses_flux_4b_and_excludes_private_models() -> None:
+def test_public_stack_uses_flux_9b_and_excludes_offellia() -> None:
     stack = active_stack(False)
     repo_ids = {model.repo_id for model in stack}
 
-    assert "black-forest-labs/FLUX.2-klein-4B" in repo_ids
-    assert "black-forest-labs/FLUX.2-klein-9B" not in repo_ids
+    assert "black-forest-labs/FLUX.2-klein-9B" in repo_ids
+    assert "black-forest-labs/FLUX.2-klein-4B" not in repo_ids
     assert not any("OFFELLIA" in repo_id for repo_id in repo_ids)
-    assert all(model.params_b <= 4.0 for model in stack)
+    assert all(model.params_b < 32.0 for model in stack)
 
 
 def test_private_catalog_keeps_stronger_research_models_available() -> None:
@@ -432,11 +432,11 @@ def test_render_operations_and_inspector_redact_payload_details() -> None:
 
 # --- catalog public_demo field tests ---
 
-def test_filter_catalog_excludes_flux_9b_in_public_mode() -> None:
+def test_filter_catalog_includes_flux_9b_in_public_mode() -> None:
     models, _ = filter_catalog(False)
     repo_ids = {model.repo_id for model in models}
 
-    assert "black-forest-labs/FLUX.2-klein-9B" not in repo_ids
+    assert "black-forest-labs/FLUX.2-klein-9B" in repo_ids
 
 
 def test_filter_catalog_includes_flux_9b_in_adult_mode() -> None:
@@ -466,11 +466,11 @@ def test_private_research_stack_constant_contains_9b_and_offellia() -> None:
     assert "Brunobkr/OFFELLIA_Q4_0_gemma-4-12B-it.gguf" in PRIVATE_RESEARCH_STACK
 
 
-def test_default_active_stack_constant_uses_4b_and_sponsor_models() -> None:
-    assert "black-forest-labs/FLUX.2-klein-4B" in DEFAULT_ACTIVE_STACK
+def test_default_active_stack_constant_uses_9b_and_sponsor_models() -> None:
+    assert "black-forest-labs/FLUX.2-klein-9B" in DEFAULT_ACTIVE_STACK
     assert "openbmb/MiniCPM-V-4.6" in DEFAULT_ACTIVE_STACK
     assert "nvidia/NVIDIA-Nemotron-Parse-v1.2" in DEFAULT_ACTIVE_STACK
-    assert "black-forest-labs/FLUX.2-klein-9B" not in DEFAULT_ACTIVE_STACK
+    assert "black-forest-labs/FLUX.2-klein-4B" not in DEFAULT_ACTIVE_STACK
 
 
 # --- schema ModelCandidate public_demo tests ---
